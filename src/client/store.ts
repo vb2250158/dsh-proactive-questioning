@@ -17,7 +17,7 @@ type Listener = () => void
 const STORAGE_PREFIX = 'dsh-proactive-questioning/v1/'
 
 function keyFor(sessionId: string, callId: string, questionId: string): string {
-  return `${callId}:${questionId}`
+  return `${sessionId}:${callId}:${questionId}`
 }
 
 function storageKey(sessionId: string, key: string): string {
