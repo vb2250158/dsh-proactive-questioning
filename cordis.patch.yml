@@ -1,0 +1,5 @@
+# Global host composition: this tool and its policy are deliberately available
+# to every DSH conversation, including custom presets that do not list it.
+- insert:
+    - id: proactive-questioning
+      name: dsh-proactive-questioning

@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+
+# Browser-local close timestamps deliberately stay outside source control.
+*.local.json
