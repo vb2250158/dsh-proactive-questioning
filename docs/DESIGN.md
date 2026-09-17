@@ -19,7 +19,15 @@
 
 ## 呈现之所以固定在输入框上方
 
-该面板挂在 `conversation.input.dock`（composer 卡片上方的全宽区），注册在 session 作用域。这个槽位的 occurrence 解析到**当前** Session 的作用域上下文，而 session 标准属性里的 `useSession` 是“当前 Session”的选择器——所以一个挂在非当前 Session 下的 occurrence 不能靠 `useSession` 判断自己的身份，必须用标准 `sessionId` 属性 + `uiSession.adapter.resolve(sessionId)` 解析自己的绑定，回答也按该身份显式投递。这一条是“气泡从未出现”那个 bug 的根因，改动前请先读 `src/client/host.ts`。
+该面板挂在 `conversation.input.dock`（composer 卡片上方的全宽区），注册在 session 作用域。
+
+**会话身份来自注册声明，不来自 props。** 客户端槽位系统按注册时的声明推导 inject 的实参：`session` 作用域的工厂被调用为 `inject(sessionId)`，id 是**位置参数**（见 `@deepseek-ai/dsh-client-ui-slots` 的 `InjectParams`，以及渲染器 `scoped-slots.tsx` 的 `runInject`——它把 `binding.key` 压进实参数组）。所以工厂的第一个参数就是 id 字符串本身，永远不是 props 对象。`ui-goal` 的 `GoalDock` 占着同一个槽位，签名正是 `inject: (sessionId) => …`，本插件的写法与它一致。
+
+把工厂写成收 props 再读 `props.sessionId`，会让每个 occurrence 都解析到 `undefined`：`binding` 恒为空 → `useQuestions` 恒返回空数组 → `QuestionDock` 每次都返回 `null`，任何会话都不渲染。这就是“压根没见它弹出来”的根因。改动 `src/client/index.ts` 的注册前请先确认实参是位置参数。
+
+组件侧另有一条：`session` 作用域的槽位组件会合并 `SessionStandardProps`（由 `ui-session` 合入 `sessionId` / `useSession` / `useProjection`），所以 **`sessionId` 在 props 上是真实存在的**，工具行正是这么拿身份的（官方 `ask_user_question` 视图同理）。两条路径的区别只在于「给组件的 props」与「给 inject 工厂的实参」，不要混用。
+
+回答经 apply 闭包中的 `ctx.sessions.scope(id).conversation` 投递——这是 `ui-conversation` 文档化的按作用域寻址发送（"address one via `ctx.sessions.scope(id).conversation`"），不需要 `uiSession.adapter.resolve`，也不再往 occurrence 上传绑定对象。
 
 ## 关闭语义
 
