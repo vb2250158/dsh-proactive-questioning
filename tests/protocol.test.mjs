@@ -19,7 +19,11 @@ test('rejects duplicate ids and invalid optional choices', () => {
   assert.throws(() => normalizeQuestions({ questions: [{ id: 'x', question: 'A', options: [] }] }), /选项数量无效/)
 })
 
-test('questions collapse to a bubble after exactly thirty seconds without expiring', () => {
+test('the "new" accent window is long enough to survive a long Agent turn', () => {
+  // The window used to be 30s. It only controls the visual accent now, but a
+  // short accent made a question the user never saw arrive with no emphasis at
+  // all, so keep a floor on it.
+  assert.ok(ACTIVE_WINDOW_MS >= 60_000, `accent window is ${ACTIVE_WINDOW_MS}ms`)
   const askedAt = 1000
   assert.equal(questionVisibility(askedAt, askedAt + ACTIVE_WINDOW_MS - 1), 'active')
   assert.equal(questionVisibility(askedAt, askedAt + ACTIVE_WINDOW_MS), 'bubble')
