@@ -31,6 +31,28 @@ test.after(() => {
   for (const store of stores) store.dispose()
 })
 
+/**
+ * Seed one question's saved clock before it is enqueued.
+ *
+ * `askedAt` is what "oldest" is measured from, and the wall clock only has
+ * millisecond resolution, so a test that needs a definite ordering must set
+ * the clock rather than hope two enqueues straddle a tick. `enqueue` adopts
+ * the saved `askedAt` for a key it has not seen, so writing storage first is
+ * the supported way to say "this one was asked earlier".
+ * @param sessionId - the Session the question belongs to.
+ * @param callId - the Tool call the question belongs to.
+ * @param questionId - the question's own id.
+ * @param askedAt - the timestamp to record.
+ * @returns the question its own arrival is seeded for.
+ */
+function seedAskedAt(sessionId, callId, questionId, askedAt) {
+  storage.set(
+    `dsh-proactive-questioning/v1/${encodeURIComponent(sessionId)}/${encodeURIComponent(`${sessionId}:${callId}:${questionId}`)}`,
+    JSON.stringify({ askedAt, state: 'open' }),
+  )
+  return { id: questionId, question: `问题 ${questionId}` }
+}
+
 test('keeps every unanswered question visible for its session', () => {
   const store = freshStore()
   store.enqueue('t1', 'call-a', [question('q1'), question('q2')])
@@ -61,8 +83,13 @@ test('drops a session ledger once all its questions are settled', () => {
 
 test('reports the oldest session still waiting on an answer', () => {
   const store = freshStore()
-  store.enqueue('t5-later', 'call-b', [question('q2')])
-  store.enqueue('t4-earlier', 'call-a', [question('q1')])
+  // Order comes from the recorded clock, not from insertion order: the two
+  // enqueues can land in one millisecond, and the later asker must not win
+  // just because the store happened to see it first.
+  const later = seedAskedAt('t5-later', 'call-b', 'q2', Date.now())
+  const earlier = seedAskedAt('t4-earlier', 'call-a', 'q1', Date.now() - 60 * 60_000)
+  store.enqueue('t5-later', 'call-b', [later])
+  store.enqueue('t4-earlier', 'call-a', [earlier])
   assert.equal(store.sessionWithOpenQuestion(), 't4-earlier')
   store.skipAll('t4-earlier')
   assert.equal(store.sessionWithOpenQuestion(), 't5-later')

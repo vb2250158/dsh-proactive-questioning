@@ -1,51 +1,39 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { QueuedQuestionToolRow, QuestionDock } from './components.tsx'
-import { contextFromProps, sessionBinding } from './host.ts'
+import { asSessionId, scopedSend } from './host.ts'
 
 export const inject = ['slots', 'sessions']
 
-/** Session identity of one dock occurrence, from the standard `sessionId` prop. */
-function dockSessionId(props: object): string | undefined {
-  const value = (props as { sessionId?: unknown }).sessionId
-  return typeof value === 'string' && value !== '' ? value : undefined
-}
-
 /** Mount one non-blocking question queue per conversation; no Rabi or emotional-data dependency exists here. */
 export function apply(ctx: ClientContext): void {
-  const send = (sessionId: string) => async (text: string): Promise<unknown> => {
-    const scope = ctx.sessions.scope(sessionId)
-    if (scope === undefined) throw new Error('原对话尚未加载，无法发送回答。')
-    return await scope.conversation.send(text)
-  }
   /**
-   * One dock occurrence's inject face.
-   *
-   * The occurrence context is read off the props: `main.conversation` (which
-   * owns the composer, and therefore this dock) resolves to the current
-   * Session's scoped context, and its Session standard kit is a selector over
-   * the *current* Session — so an occurrence mounted for a non-current Session
-   * would otherwise read the wrong Session's questions. Resolving through
-   * `uiSession.adapter` by identity keeps each occurrence on its own Session,
-   * and the answer is addressed to that identity explicitly.
+   * The Tool row's only job is to mirror the call into the store. Identity
+   * comes from the framework's Session standard props (`sessionId`), which
+   * `ui-tool`'s `ToolCallOwnerProps` is composed with — the shipped
+   * `ask_user_question` view does the same, and neither needs an inject face.
    */
-  const dockInjected = (props: object) => {
-    const context = contextFromProps(props)
-    const sessionId = dockSessionId(props)
-    const binding = sessionId === undefined ? undefined : sessionBinding(context, sessionId)
-    return {
-      ctx: context,
-      sessionId,
-      binding,
-      send: (text: string) => sessionId === undefined || binding === undefined
-        ? Promise.reject(new Error('原对话尚未加载，无法发送回答。'))
-        : send(sessionId)(text),
-    }
-  }
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
     name: 'tool.call.toolview', key: 'queue_user_question', locale: 'conversation',
   }, QueuedQuestionToolRow))
+
+  /**
+   * One dock occurrence per Session, full width above the composer card.
+   *
+   * This is a `session`-scope slot, so the registration declares the inject
+   * face and the framework calls it as `inject(sessionId)` — the id is a
+   * positional argument derived from the declaration, not a field on an
+   * argument object. `ui-goal`'s `GoalDock` occupies this same slot with that
+   * exact signature. Reading identity out of a props parameter here yields
+   * `undefined` for every occurrence, which renders no dock at all; that was
+   * the long-standing reason a queued question never appeared.
+   */
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-    name: 'conversation.input.dock', id: 'proactive-questioning-dock', order: 15, locale: 'conversation',
-    inject: dockInjected,
+    name: 'conversation.input.dock',
+    id: 'proactive-questioning-dock',
+    order: 15,
+    locale: 'conversation',
+    inject: (sessionId: unknown): { send?: (text: string) => Promise<unknown> } => ({
+      send: scopedSend(ctx, asSessionId(sessionId)),
+    }),
   }, QuestionDock))
 }

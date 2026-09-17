@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { Question, QuestionEntry } from './store.ts'
 import { questionStore } from './store.ts'
 import { questionVisibility } from './lifecycle.mjs'
-import type { SessionScopeBinding } from './host.ts'
 
 type Send = (text: string) => Promise<unknown>
 
-/** One occurrence's runtime props: this plugin's inject plus the Session standard kit. */
+/**
+ * One dock occurrence's runtime props.
+ *
+ * `sessionId` is the framework's own Session standard prop (`ui-session`
+ * merges `sessionId`/`useSession`/`useProjection` into every session-scope
+ * slot), so it is not something this plugin injects. `send` is the one
+ * injected verb; see `index.ts` for how it is built.
+ */
 type DockProps = {
-  ctx?: ClientContext
   sessionId?: unknown
-  binding?: SessionScopeBinding | undefined
   send?: Send
 }
 
@@ -78,19 +81,18 @@ function readArgsRaw(block: unknown): unknown {
   return 'kind' in candidate ? candidate.call?.argsRaw : candidate.argsRaw
 }
 
-function useQuestions(binding: SessionScopeBinding | undefined, sessionId: string | undefined): readonly QuestionEntry[] {
-  const store = useSyncExternalStore(
+function useQuestions(sessionId: string | undefined): readonly QuestionEntry[] {
+  const revision = useSyncExternalStore(
     listener => questionStore.subscribe(listener),
     () => questionStore.revision,
     () => 0,
   )
-  const bindingKey = binding?.key
   return useMemo(
     () => sessionId === undefined ? [] : questionStore.snapshot(sessionId),
-    // `store` is the store's revision: a mutation republishes every snapshot,
-    // so it is the only correctness input besides the Session identity.
+    // `revision` is the store's mutation counter: it republishes every
+    // snapshot, so it is the only correctness input besides the identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store, sessionId, bindingKey],
+    [revision, sessionId],
   )
 }
 
@@ -217,9 +219,9 @@ export function QueuedQuestionToolRow({ block, callId, sessionId }: {
  * stays for as long as any question is unanswered: the newest one is open
  * for composing an answer, the older ones collapse into one-line rows.
  */
-export function QuestionDock({ ctx, sessionId, binding, send }: DockProps) {
+export function QuestionDock({ sessionId, send }: DockProps) {
   const target = typeof sessionId === 'string' && sessionId !== '' ? sessionId : undefined
-  const entries = useQuestions(binding, target)
+  const entries = useQuestions(target)
   const [openKey, setOpenKey] = useState<string | undefined>(undefined)
   const [collapsed, setCollapsed] = useState(false)
   const answer = send ?? (() => Promise.reject(new Error('原对话尚未加载，无法发送回答。')))
