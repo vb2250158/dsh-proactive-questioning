@@ -1,18 +1,30 @@
 {
   "name": "dsh-proactive-questioning",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Private DSH non-blocking, per-conversation user-question bubbles.",
   "type": "module",
   "main": "lib/index.mjs",
   "exports": {
-    ".": { "default": "./lib/index.mjs" },
-    "./client": { "default": "./lib/client.js" },
+    ".": {
+      "default": "./lib/index.mjs"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
-  "files": ["cordis.patch.yml", "lib", "src", "README.md", "docs"],
+  "files": [
+    "cordis.patch.yml",
+    "lib",
+    "src",
+    "README.md",
+    "docs"
+  ],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
@@ -41,5 +53,7 @@
     "@deepseek-ai/dsh-tools": ">=0.1.0-rc.7",
     "react": "^18.2.0"
   },
-  "devDependencies": { "esbuild": "0.25.12" }
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
 }
