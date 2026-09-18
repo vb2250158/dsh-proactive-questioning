@@ -207,7 +207,43 @@ const bar = dockHost.querySelector('button[aria-expanded]')
 act(() => { bar.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
 assert.ok(dockHost.querySelector('[data-dsh-question-card]') === null, 'collapsing must hide the card')
 assert.match(dockHost.textContent, /Agent 想听听你的想法/, 'collapsing must keep the bar')
+act(() => { bar.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+
+// 7. The card must be STYLED, not merely structured. This is the assertion that
+//    catches a hand-rolled approximation: without the stylesheet the classes are
+//    cosmetic tokens and every rule — radius, surface, indicator geometry — is
+//    absent, yet the DOM and the copy look perfect. The card is a transcription
+//    of the blocking card's stylesheet, so the values are asserted directly.
+const styles = [...document.querySelectorAll('style[data-plugin-css]')]
+assert.ok(styles.length > 0, 'the bundle must inject its stylesheet')
+const sheet = styles.map(tag => tag.textContent).join('\n')
+assert.match(sheet, /\.\w+_card\b/, 'the stylesheet must scope the card class')
+for (const [declaration, why] of [
+  ['border-radius:20px', "the blocking card's 20px card radius"],
+  ['background:var(--dsw-specific-input-major)', "the blocking card's input surface"],
+  ['box-shadow:var(--dsw-elevation-panel)', "the blocking card's panel elevation"],
+  ['padding:20px 16px 0 24px', "the blocking card's header insets"],
+  ['border-radius:6px', "the blocking card's 20x20 indicator geometry"],
+  ['word-spacing:-2px', "the blocking card's pager type ramp"],
+]) {
+  assert.ok(sheet.includes(declaration), `the stylesheet must carry ${why} (${declaration})`)
+}
+// The countdown is the one addition, and it must ride the same ramp as `.progress`.
+assert.match(sheet, /\.\w+_countdown\b/, 'the countdown class must be styled')
+assert.match(sheet, /\[data-state='settled'\]|\[data-state=settled\]/, 'the settled state must be styled')
+// A literal colour here means the card stopped following the theme tokens the
+// blocking card uses. `#0000` is excluded because lightningcss minifies
+// `transparent` to it — a keyword, not a hardcoded palette value.
+assert.doesNotMatch(sheet.replaceAll('#0000', ''), /#[0-9a-fA-F]{3,8}\b/, 'no literal colours may enter the stylesheet')
+assert.doesNotMatch(sheet, /prefers-color-scheme|\[data-theme/, 'the stylesheet must not select on theme')
+// The class map must be real: every class the DOM carries has to resolve to a
+// scoped name, or the rules would address nothing.
+const cardEl = dockHost.querySelector('[data-dsh-question-card]')
+for (const className of cardEl.classList) {
+  assert.match(className, /^\w+_\w+$/, `the card's class "${className}" must be a scoped CSS-module name`)
+}
 
 console.log('render smoke: all assertions passed')
 console.log(`  countdown repainted ${firstRead} -> ..., and read ${settledRead} once the window lapsed`)
 console.log('  a lapsed window kept the question answerable; no render crash was swallowed')
+console.log(`  stylesheet injected: ${String(styles.length)} tag(s), ${String(sheet.length)} bytes of scoped CSS`)

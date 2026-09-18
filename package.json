@@ -1,6 +1,6 @@
 {
   "name": "dsh-proactive-questioning",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Private DSH non-blocking, per-conversation user-question bubbles.",
   "type": "module",
@@ -39,6 +39,7 @@
     "build": "node ./scripts/build.mjs",
     "test": "node --test ./tests/*.test.mjs",
     "test:render": "node ./tests/render-smoke.mjs",
+    "test:visual": "node ./tests/visual-preview.mjs",
     "check": "node --check ./src/protocol.mjs && node --check ./src/client/lifecycle.mjs && npm run test && npm run build"
   },
   "dependencies": {

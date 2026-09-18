@@ -4,3 +4,8 @@ node_modules/
 
 # Browser-local close timestamps deliberately stay outside source control.
 *.local.json
+
+# Screenshots and scratch scripts from `npm run test:visual` / fidelity probes.
+# The renderer is reproducible from `lib/client.js`, so these are review output,
+# not source.
+.preview/

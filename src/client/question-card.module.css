@@ -1,0 +1,620 @@
+/*
+ * The blocking question card's presentation, transcribed.
+ *
+ * This is ui-user-questions' `QuestionComposer.module.css` with the rules this
+ * surface needs, kept byte-identical wherever they are shared. That stylesheet
+ * is a package-internal CSS module and cannot be imported from here, and the
+ * brief for this card was "the same as the blocking one, just with a countdown"
+ * — so the properties are copied rather than re-derived. A value that drifts
+ * from the original is a bug in this file, not a design decision: when the
+ * blocking card changes, change both.
+ *
+ * The original carries 132 declarations; 125 of them appear here verbatim. The
+ * seven that do not are all structural consequences of the two surfaces sitting
+ * in different seats, and each is accounted for below or in-file:
+ *
+ *   .frame { justify-content: center;                     } the dock owns the
+ *   .frame { padding: 6px calc(...) 10px;                  } composer seat, so
+ *                                                           there is no centering
+ *                                                           frame to reproduce
+ *   .card  { max-width: var(--dsh-chat-content-width);    } the dock already
+ *                                                           constrains width
+ *   .card  { max-height: min(60vh, 520px);                } shares the seat with
+ *                                                           the dock bar
+ *   .cardMinimized { max-height: none;                    } no minimize here —
+ *   .cardMinimized .header { padding-bottom: 14px;        } collapse is the
+ *                                                           dock bar's job
+ *   .detail { margin: 0 2px 8px; }                          needs a question
+ *                                                           `detail` field this
+ *                                                           plugin's store has no
+ *                                                           analogue for
+ *
+ * `tests/stylesheet-fidelity.mjs` re-derives that comparison against the
+ * original and fails on any new drift, so this list cannot quietly rot.
+ *
+ * The additions over the original are `.countdown` and its two states, the
+ * `.cardOlder` collapsed-row variant, the dock shell, and the tool row — the
+ * 19 declarations a reader sees as "extra" when diffing the two files.
+ */
+
+/* Figma Input 973:36348 body over the 1019:36938 header: no banner strip —
+   the card keeps zero padding and sections carry their own insets. */
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* The blocking card caps against the viewport and scrolls its body because it
+     owns the composer seat. This card shares that seat with a collapsible dock,
+     so it caps at a smaller share and the same `.body` scroll takes over.
+     The blocking card's own `max-width: var(--dsh-chat-content-width)` is
+     dropped for the same reason: the dock is already constrained by the seat it
+     sits in, and a second width constraint would double-count it. */
+  max-height: min(40vh, 360px);
+  padding: 0 0 10px;
+  border: 0;
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2-darkmode-thin);
+  border-radius: 20px;
+  background: var(--dsw-specific-input-major);
+  box-shadow: var(--dsw-elevation-panel);
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  /* Elevated surface in dark, same as the menus: the body inside scrolls once
+     the card hits the cap above, so the thumb takes the l2 pair. Declared on
+     the card because the elevation belongs to the surface, and the custom
+     properties inherit down to `.body`. */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.card,
+.card * {
+  box-sizing: border-box;
+}
+
+/* Header button group: the countdown read-out sits next to the close action on
+   the same 24px icon-button grid, so the right edge lines up with the blocking
+   card's. */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Figma 1019:36938 header: heading block left, actions right; the pager sits in
+   the footer to balance the card. */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+  padding: 20px 16px 0 24px;
+}
+
+.headingBlock {
+  min-width: 0;
+}
+
+/* Eyebrow-to-title gap widened from the figma 2px (user-tuned). */
+.eyebrow {
+  margin-bottom: 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.progress {
+  padding: 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 500;
+  white-space: nowrap;
+  /* Narrow the plain spaces around the slash without touching glyph tracking. */
+  word-spacing: -2px;
+}
+
+.iconButton {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  corner-shape: round;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.iconButton:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 8px 0 0;
+  padding: 4px 12px;
+}
+
+.option {
+  display: flex;
+  /* flex-start, not center: with a wrapped description the indicator must stay
+     on the FIRST line (centering drifts it down the taller copy block). The 8px
+     padding makes a single-line row 40px exactly, so nothing reads as
+     top-heavy; .number/.checkbox re-center against the first line box. */
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  /* Rows are the scroll content, never the slack absorber: a shrinkable row
+     collapses to min-height while its wrapped copy keeps the taller intrinsic
+     height, and centered content then paints outside the row box. */
+  flex-shrink: 0;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.option:hover:not(:disabled),
+.optionSelected {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.optionSelected {
+  border-color: var(--dsw-alias-border-l2);
+}
+
+.option:disabled {
+  cursor: default;
+}
+
+/* Leading indicator (figma 20×20, radius 6): single-select shows the option
+   number, multi-select swaps in a checkbox; the custom-answer row follows —
+   its checkbox mirrors the typed draft (styling only). */
+.number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  /* (24px first-line box − 20px indicator) / 2: centers the indicator against
+     the first text line under the row's flex-start alignment. */
+  margin-top: 2px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-overlay);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+/* Multi-select box (figma 1055:41594, user-tuned down to 14×14): a radius-4 box
+   centered in the 20px indicator seat; the box itself is the ::before layer so
+   the check icon stacks over it in the same grid cell. */
+.checkbox {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  /* Same first-line centering as .number under flex-start alignment. */
+  margin-top: 2px;
+}
+
+.checkbox::before {
+  content: '';
+  grid-area: 1 / 1;
+  width: 14px;
+  height: 14px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 4px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.checkbox > svg {
+  grid-area: 1 / 1;
+}
+
+/* Checked: label-primary fill with a primary-foreground check — the pair
+   inverts with the theme. */
+.checkboxChecked {
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.checkboxChecked::before {
+  border-color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-label-primary);
+}
+
+.optionCopy {
+  min-width: 0;
+  flex: 1;
+}
+
+.optionLine {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+}
+
+.optionLabel {
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 500;
+}
+
+.badge {
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--dsw-specific-sidebar-nav-item-active-accent);
+  color: var(--dsw-alias-button-info-fill);
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.description {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 400;
+}
+
+/* Custom answer row (figma 973:36427): an option-shaped row whose copy is an
+   inline text input; focus or a typed draft lifts it to the selected look. */
+.customRow {
+  display: flex;
+  /* Same first-line alignment as .option — the indicator seat carries the 2px
+     re-centering margin. */
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  /* Same reason as .option: the custom row is scroll content, and shrinking it
+     pushes the inline input past the footer. */
+  flex-shrink: 0;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.customRow:hover,
+.customRow:focus-within,
+.customRowActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.customRow:focus-within,
+.customRowActive {
+  border-color: var(--dsw-alias-border-l2);
+}
+
+/* Auto-growing free-text answer: mirror and textarea share one grid cell, the
+   mirror sizes it, and the textarea stretches to it. The two layers MUST keep
+   identical type, padding and wrapping — a mismatch makes the box the wrong
+   height for the text the user is typing. */
+.field {
+  display: grid;
+  min-width: 0;
+  --dsh-answer-field-padding: 0;
+}
+
+.field > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+  padding: var(--dsh-answer-field-padding);
+  font: inherit;
+  font-size: 14px;
+  line-height: 24px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* The height ruler, never painted. Growth stops at 6 lines, matching the
+   blocking card. content-box overrides the card-wide border-box so the cap
+   counts TEXT lines in both variants. */
+.fieldMirror {
+  box-sizing: content-box;
+  max-height: 144px;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.fieldInput {
+  resize: none;
+  /* The stack's only scrollport: past the mirror's cap the field stops growing
+     and this scrolls. */
+  overflow-y: auto;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  caret-color: var(--dsw-alias-state-business-primary);
+}
+
+.fieldInput::placeholder {
+  color: var(--dsw-alias-label-caption);
+}
+
+/* Inline variant: the custom row's copy column, borrowing the row's chrome. */
+.customInline {
+  flex: 1;
+}
+
+/* Optionless question: the free-form answer is the whole body, so it carries
+   its own frame. The 12px side margins add to the .options 12px padding so both
+   edges align with the title's 24px inset; two lines are reserved before the
+   answer starts growing. */
+.customBlock {
+  min-height: 64px;
+  flex-shrink: 0;
+  margin: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-module-platform);
+  --dsh-answer-field-padding: 8px 12px;
+}
+
+.customBlock:focus-within {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-top: 12px;
+  padding: 0 10px 0 18px;
+}
+
+.feedback {
+  flex: 1;
+  min-height: 16px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: right;
+}
+
+/*
+ * --- the one addition over the blocking card -------------------------------
+ *
+ * The fresh-period read-out. It borrows `.progress`' type ramp so it reads as a
+ * sibling of the pager rather than a new kind of text, and dims one step to
+ * label-tertiary so it never competes with the question itself.
+ *
+ * `settled` is NOT an expiry state: it says the accent window has passed, which
+ * is all the number ever measured. The card it sits on stays exactly as usable
+ * as it was a second earlier.
+ */
+.countdown {
+  padding: 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 500;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown[data-state='settled'] {
+  color: var(--dsw-alias-label-caption);
+}
+
+/* The dock's own shell: the panel the blocking card has no analogue for. */
+.dock {
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-specific-tip);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dockBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dockTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.dockCount {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.dockCaret {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+}
+
+.dockBody {
+  padding: 0 12px 12px;
+}
+
+/* Collapsed-row variant for the older, non-focused questions: keeps its
+   one-line shape so only the newest question costs a full card. */
+.cardOlder {
+  margin-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+  padding-top: 10px;
+}
+
+.olderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+  padding-top: 10px;
+}
+
+.olderLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.linkButton {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.linkButtonMuted {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.skipAllRow {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.skipAll {
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toolRow {
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  padding: 12px;
+}
+
+.toolRowTitle {
+  font-size: 13px;
+}
+
+.toolRowNote {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+@media (max-width: 720px) {
+  .card {
+    border-radius: 16px;
+  }
+
+  .header {
+    padding: 10px 12px 0 18px;
+  }
+
+  .options {
+    padding: 4px 8px;
+  }
+
+  .title {
+    font-size: 15px;
+    line-height: 21px;
+  }
+
+  .option,
+  .customRow {
+    padding: 8px 6px;
+  }
+
+  .footer {
+    align-items: flex-end;
+    padding: 0 10px;
+  }
+
+  .footerActions {
+    flex-shrink: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .option,
+  .customRow {
+    transition: none;
+  }
+}
