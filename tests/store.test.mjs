@@ -139,3 +139,79 @@ test('survives localStorage being unavailable', () => {
     globalThis.window = original
   }
 })
+
+/**
+ * The repaint clock is what makes the countdown move, and it is also the one
+ * thing here that can keep a browser-less host alive. Both halves are asserted
+ * below: it must be running while something is open, and it must be `unref`'d
+ * and stopped once nothing is.
+ */
+test('runs one repaint clock only while a question is open, and unrefs it', () => {
+  const created = []
+  const cleared = []
+  const realSetInterval = globalThis.setInterval
+  const realClearInterval = globalThis.clearInterval
+  globalThis.setInterval = (handler, delay) => {
+    // `scheduleVisibility` uses setTimeout, so any interval seen here is ours.
+    const unrefCalls = { count: 0 }
+    const handle = { handler, delay, unref() { unrefCalls.count += 1 } }
+    created.push({ handle, unrefCalls })
+    return handle
+  }
+  globalThis.clearInterval = handle => { cleared.push(handle) }
+  try {
+    const store = freshStore()
+    assert.equal(created.length, 0, 'no clock before anything is queued')
+
+    store.enqueue('tick-1', 'call-a', [question('q1')])
+    assert.equal(created.length, 1, 'queuing starts exactly one clock')
+    assert.equal(created[0].handle.delay, 1000, 'the countdown needs second resolution')
+    assert.equal(created[0].unrefCalls.count, 1,
+      'an un-unref\'d interval keeps the process alive after its work is done')
+
+    // A second question must reuse the clock rather than start a competing one.
+    store.enqueue('tick-1', 'call-b', [question('q2')])
+    assert.equal(created.length, 1, 'a second question reuses the running clock')
+
+    // Every repaint is a publish, which is what the countdown renders from.
+    const ticks = listener => { store.subscribe(listener) }
+    let published = 0
+    ticks(() => { published += 1 })
+    created[0].handle.handler()
+    assert.equal(published, 1, 'a tick republishes the snapshot')
+
+    store.close(store.snapshot('tick-1')[0], 'answered')
+    assert.equal(cleared.length, 0, 'one question is still open, so the clock keeps running')
+    store.close(store.snapshot('tick-1')[0], 'skipped')
+    assert.equal(cleared.length, 1, 'the clock stops once nothing is open')
+    assert.equal(cleared[0], created[0].handle, 'the stopped clock is the one that was started')
+  } finally {
+    globalThis.setInterval = realSetInterval
+    globalThis.clearInterval = realClearInterval
+  }
+})
+
+test('skipAll and dispose both retire the repaint clock', () => {
+  const created = []
+  const cleared = []
+  const realSetInterval = globalThis.setInterval
+  const realClearInterval = globalThis.clearInterval
+  globalThis.setInterval = () => { const handle = { unref() {} }; created.push(handle); return handle }
+  globalThis.clearInterval = handle => { cleared.push(handle) }
+  try {
+    const skipped = freshStore()
+    skipped.enqueue('tick-2', 'call-a', [question('q1')])
+    skipped.skipAll('tick-2')
+    assert.equal(created.length, 1)
+    assert.equal(cleared.length, 1, 'skipAll retires the clock with the last open question')
+
+    const disposed = freshStore()
+    disposed.enqueue('tick-3', 'call-a', [question('q1')])
+    assert.equal(created.length, 2, 'a fresh store starts its own clock')
+    disposed.dispose()
+    assert.equal(cleared.length, 2, 'dispose tears the clock down with the accent timers')
+  } finally {
+    globalThis.setInterval = realSetInterval
+    globalThis.clearInterval = realClearInterval
+  }
+})

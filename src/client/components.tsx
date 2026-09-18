@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import {
+  Button, IconCheckOutline14, IconChevronLeftOutline14,
+  IconChevronRightOutline14, IconCloseOutline16, IconEditOutline16,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Question, QuestionEntry } from './store.ts'
 import { questionStore } from './store.ts'
-import { questionVisibility } from './lifecycle.mjs'
+import { questionRemainingSeconds, questionVisibility } from './lifecycle.mjs'
 
 type Send = (text: string) => Promise<unknown>
 
@@ -24,6 +28,141 @@ const PANEL = {
   background: 'var(--dsw-specific-tip)',
   color: 'var(--dsw-alias-label-primary)',
 } as const
+
+/**
+ * The blocking card's presentation, restated through the same theme tokens.
+ *
+ * Deliberately mirrors `ui-user-questions`' `QuestionComposer.module.css` —
+ * card surface, 20px radius, 24/16px header insets, 20×20 numbered indicator,
+ * and the bordered footer buttons — so a queued question reads as the same
+ * component family as the blocking one. It is restated rather than imported
+ * because that stylesheet is package-internal (`css` module scope, not a
+ * published export), and this plugin ships its own bundle.
+ */
+const CARD: Record<string, string | number> = {
+  display: 'flex',
+  flexDirection: 'column',
+  width: '100%',
+  padding: '0 0 10px',
+  border: '0.5px solid var(--dsw-alias-border-l2-darkmode-thin)',
+  borderRadius: 20,
+  background: 'var(--dsw-specific-input-major)',
+  boxShadow: 'var(--dsw-elevation-panel)',
+  color: 'var(--dsw-alias-label-primary)',
+  overflow: 'hidden',
+}
+
+const HEADER: Record<string, string | number> = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  gap: 16,
+  padding: '20px 16px 0 24px',
+}
+
+const ICON_BUTTON: Record<string, string | number> = {
+  display: 'grid',
+  placeItems: 'center',
+  width: 24,
+  height: 24,
+  padding: 0,
+  border: 'none',
+  borderRadius: 999,
+  background: 'transparent',
+  color: 'var(--dsw-alias-label-tertiary)',
+  cursor: 'pointer',
+}
+
+const OPTION_ROW: Record<string, string | number> = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 8,
+  width: '100%',
+  minHeight: 40,
+  flexShrink: 0,
+  padding: '8px 12px 8px 8px',
+  border: '1px solid transparent',
+  borderRadius: 12,
+  background: 'transparent',
+  color: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+}
+
+/** Leading indicator seat: 20×20, radius 6, offset to center on the first line box. */
+const INDICATOR: Record<string, string | number> = {
+  display: 'grid',
+  placeItems: 'center',
+  flex: '0 0 20px',
+  width: 20,
+  height: 20,
+  marginTop: 2,
+  borderRadius: 6,
+  background: 'var(--dsw-alias-bg-overlay)',
+  color: 'var(--dsw-alias-label-secondary)',
+  fontSize: 12,
+  fontWeight: 500,
+  lineHeight: '18px',
+}
+
+const FOOTER: Record<string, string | number> = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  marginTop: 12,
+  padding: '0 10px 0 18px',
+}
+
+/** Pager / countdown read-out: the blocking card's `.progress` type ramp. */
+const READOUT: Record<string, string | number> = {
+  color: 'var(--dsw-alias-label-secondary)',
+  fontSize: 14,
+  lineHeight: '24px',
+  fontWeight: 500,
+  whiteSpace: 'nowrap',
+}
+
+/**
+ * Split the conventional recommendation suffix off an option label.
+ *
+ * Same rule as the blocking card's `parseRecommendedLabel`, so a question
+ * authored for either surface marks its recommended option identically. The
+ * suffix is presentation only: selecting the option still sends the ORIGINAL
+ * label, which is what keeps the answer meaningful to the Agent that asked.
+ * @param label - the option label as authored.
+ * @returns the display label plus whether it carried a recommendation marker.
+ */
+function parseRecommendedLabel(label: string): { label: string, recommended: boolean } {
+  const suffix = /\s*(?:\((?:recommended|推荐)\)|（(?:recommended|推荐)）)\s*$/i
+  return suffix.test(label)
+    ? { label: label.replace(suffix, ''), recommended: true }
+    : { label, recommended: false }
+}
+
+/**
+ * The fresh-period read-out for one card.
+ *
+ * Renders the remaining seconds while the accent window is open and a neutral
+ * marker afterwards. Both branches are informational: the window closing is
+ * NOT an expiry, nothing is hidden or settled here, and reaching the end must
+ * leave the card exactly as usable as it was one second earlier.
+ * @param askedAt - when the question was enqueued.
+ * @returns the countdown node.
+ */
+function Countdown({ askedAt }: { askedAt: number }) {
+  const remaining = questionRemainingSeconds(askedAt)
+  useEffect(() => { if (remaining === undefined) questionStore.skipAll() }, [remaining])
+  return <span
+    data-dsh-question-countdown
+    data-state={remaining === undefined ? 'settled' : 'counting'}
+    title="新鲜期剩余时间。到期后问题仍然保留，不会自动关闭。"
+    aria-label={remaining === undefined ? '新鲜期已过，问题仍然保留' : `新鲜期还剩 ${String(remaining)} 秒`}
+    style={{ ...READOUT, fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' }}
+  >
+    {remaining === undefined ? '已保留' : `${String(remaining)}s`}
+  </span>
+}
 
 /**
  * Questions of one call.
@@ -104,53 +243,100 @@ function answerText(entry: QuestionEntry, selected: string[], custom: string): s
   ].join('\n')
 }
 
-function Chip({ label, selected, disabled, onClick }: {
+/**
+ * One option row, shaped like the blocking card's.
+ *
+ * Single-select shows its ordinal in the indicator seat, multi-select swaps in
+ * a checkbox that mirrors the selection. A preferred option carries the same
+ * "推荐" tag the blocking surface uses, parsed off the label so a question
+ * written once reads the same on either surface.
+ */
+function OptionRow({ index, label, description, selected, multiSelect, busy, onChoose }: {
+  index: number
   label: string
+  description?: string
   selected: boolean
-  disabled: boolean
-  onClick: () => void
+  multiSelect: boolean
+  busy: boolean
+  onChoose: () => void
 }) {
-  return <button type="button" role="radio" aria-checked={selected} disabled={disabled} onClick={onClick}
+  const display = parseRecommendedLabel(label)
+  return <button
+    type="button"
+    data-dsh-question-option
+    data-selected={selected ? 'true' : 'false'}
+    role={multiSelect ? 'checkbox' : 'radio'}
+    aria-checked={selected}
+    aria-label={display.label}
+    disabled={busy}
+    onClick={onChoose}
     style={{
-      border: `1px solid ${selected ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-border-l2)'}`,
-      borderRadius: 999, padding: '5px 11px', fontSize: 13, lineHeight: '18px',
-      background: selected ? 'var(--dsw-alias-interactive-bg-hover)' : 'var(--dsw-alias-bg-base)',
-      color: 'var(--dsw-alias-label-primary)', cursor: disabled ? 'default' : 'pointer',
-      opacity: disabled ? .6 : 1,
-    }}>{label}</button>
+      ...OPTION_ROW,
+      // Single-select keeps the selected row visibly committed; multi-select
+      // reuses the same surface so both read as one control family.
+      ...selected ? { background: 'var(--dsw-alias-interactive-bg-hover)', borderColor: 'var(--dsw-alias-border-l2)' } : {},
+      cursor: busy ? 'default' : 'pointer',
+    }}
+  >
+    {multiSelect
+      ? <CheckBox checked={selected} />
+      : <span aria-hidden style={INDICATOR}>{index + 1}</span>}
+    <span style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 6px' }}>
+      <span style={{ fontSize: 14, lineHeight: '24px', fontWeight: 500 }}>{display.label}</span>
+      {display.recommended
+        ? <span style={{
+            padding: '0 4px', borderRadius: 6, fontSize: 11, lineHeight: '18px', fontWeight: 600,
+            background: 'var(--dsw-specific-sidebar-nav-item-active-accent)',
+            color: 'var(--dsw-alias-button-info-fill)',
+          }}>推荐</span>
+        : null}
+      {description === undefined
+        ? null
+        : <span style={{ color: 'var(--dsw-alias-label-tertiary)', fontSize: 14, lineHeight: '24px' }}>{description}</span>}
+    </span>
+  </button>
 }
 
-function Action({ label, primary, disabled, onClick }: {
-  label: string
-  primary: boolean
-  disabled: boolean
-  onClick: () => void
-}) {
-  return <button type="button" disabled={disabled} onClick={onClick}
-    style={{
-      border: primary ? '1px solid transparent' : '0.5px solid var(--dsw-alias-border-l3)',
-      borderRadius: 999, padding: '5px 12px', fontSize: 12, lineHeight: '18px',
-      background: primary ? 'var(--dsw-alias-button-primary-fill)' : 'transparent',
-      color: primary ? 'var(--dsw-alias-label-primary-foreground)' : 'var(--dsw-alias-label-secondary)',
-      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? .5 : 1,
-    }}>{label}</button>
+/** Multi-select marker: a 14×14 box drawn as a layer so the check stacks over it. */
+function CheckBox({ checked }: { checked: boolean }) {
+  return <span aria-hidden style={{ display: 'grid', placeItems: 'center', flex: '0 0 20px', width: 20, height: 20, marginTop: 2 }}>
+    <span style={{
+      gridArea: '1 / 1', width: 14, height: 14, borderRadius: 4,
+      border: `0.5px solid ${checked ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-border-l4)'}`,
+      background: checked ? 'var(--dsw-alias-label-primary)' : 'transparent',
+    }} />
+    {checked
+      ? <span style={{ gridArea: '1 / 1', display: 'grid', placeItems: 'center', color: 'var(--dsw-alias-label-primary-foreground)' }}>
+          <IconCheckOutline14 size={12} />
+        </span>
+      : null}
+  </span>
 }
 
-function QuestionCard({ entry, send, expanded }: { entry: QuestionEntry, send: Send, expanded: boolean }) {
+function QuestionCard({ entry, send, expanded, index, total, onClose }: {
+  entry: QuestionEntry
+  send: Send
+  expanded: boolean
+  index: number
+  total: number
+  onClose: () => void
+}) {
   const [selected, setSelected] = useState<string[]>([])
   const [custom, setCustom] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const options = entry.question.options ?? []
+  const multiSelect = entry.question.multiSelect === true
   const canSubmit = selected.length > 0 || custom.trim() !== ''
+  const locked = busy || submitted
   const choose = (label: string) => {
-    setSelected(previous => entry.question.multiSelect
+    setSelected(previous => multiSelect
       ? previous.includes(label) ? previous.filter(value => value !== label) : [...previous, label]
       : previous.includes(label) ? [] : [label])
   }
   const submit = async () => {
-    if (!canSubmit || busy || submitted) return
+    if (!canSubmit || locked) return
     setBusy(true); setError('')
     try {
       await send(answerText(entry, selected, custom.trim()))
@@ -164,35 +350,124 @@ function QuestionCard({ entry, send, expanded }: { entry: QuestionEntry, send: S
       setBusy(false)
     }
   }
-  return <div role="group" aria-label={entry.question.question}
-    style={{ marginTop: 10, ...expanded ? {} : { borderTop: '0.5px solid var(--dsw-alias-border-l1)', paddingTop: 10 } }}>
-    {expanded && entry.question.header
-      ? <div style={{ color: 'var(--dsw-alias-label-tertiary)', fontSize: 12, marginBottom: 4 }}>{entry.question.header}</div>
-      : null}
-    <div style={{ fontSize: 13, lineHeight: '20px', whiteSpace: 'pre-wrap' }}>{entry.question.question}</div>
-    {options.length === 0 ? null : <div role={entry.question.multiSelect ? 'group' : 'radiogroup'}
-      aria-label={entry.question.multiSelect ? '可多选' : '单选'} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-      {options.map(option => <Chip key={option.label} label={option.label} disabled={busy}
-        selected={selected.includes(option.label)} onClick={() => { choose(option.label) }} />)}
-    </div>}
-    {expanded ? <textarea aria-label="补充回答" value={custom} disabled={busy}
-      onChange={event => setCustom(event.currentTarget.value)}
-      placeholder="也可以不选选项，直接写想法"
-      style={{
-        boxSizing: 'border-box', width: '100%', minHeight: 56, marginTop: 8, padding: '7px 9px',
-        fontSize: 13, lineHeight: '20px', resize: 'vertical', outline: 'none',
-        color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-base)',
-        border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8,
-      }} /> : null}
-    {error ? <p role="alert" style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--dsw-alias-state-error-primary)' }}>{error}</p> : null}
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-      <Action label={busy ? '发送中…' : submitted ? '已提交' : '提交回答'} primary disabled={!canSubmit || busy || submitted} onClick={() => { void submit() }} />
-      <Action label="跳过" primary={false} disabled={busy || submitted} onClick={() => { questionStore.close(entry, 'skipped') }} />
-      {!custom.trim() && options.length > 0 && !expanded
-        ? <span style={{ color: 'var(--dsw-alias-label-tertiary)', fontSize: 12 }}>也可以直接写下想法</span>
-        : null}
+  // The collapsed variant keeps its one-line row and drops the card chrome:
+  // only the newest question is worth a full card, older ones must stay cheap.
+  if (!expanded) {
+    return <div role="group" aria-label={entry.question.question}
+      style={{ marginTop: 10, borderTop: '0.5px solid var(--dsw-alias-border-l1)', paddingTop: 10 }}>
+      <div style={{ fontSize: 13, lineHeight: '20px', whiteSpace: 'pre-wrap' }}>{entry.question.question}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        {options.map((option, optionIndex) => <OptionRow
+          key={option.label} index={optionIndex} label={option.label} description={option.description}
+          selected={selected.includes(option.label)} multiSelect={multiSelect} busy={locked}
+          onChoose={() => { choose(option.label) }} />)}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <textarea aria-label="补充回答" value={custom} disabled={locked}
+          onChange={event => { setCustom(event.currentTarget.value) }}
+          placeholder="也可以不选选项，直接写想法"
+          style={{
+            boxSizing: 'border-box', width: '100%', minHeight: 56, padding: '7px 9px',
+            fontSize: 13, lineHeight: '20px', resize: 'vertical', outline: 'none',
+            color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-base)',
+            border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8,
+          }} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+        <Button variant="outline" disabled={locked} onClick={() => { questionStore.close(entry, 'skipped') }}>跳过本题</Button>
+        <Button variant="primary" disabled={!canSubmit || locked} onClick={() => { void submit() }}>
+          {busy ? '发送中…' : submitted ? '已提交' : '提交'}
+        </Button>
+      </div>
+      {error ? <p role="alert" style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--dsw-alias-state-error-primary)' }}>{error}</p> : null}
     </div>
-  </div>
+  }
+  return <section
+    data-dsh-question-card
+    aria-labelledby={`dsh-question-${entry.key}`}
+    style={{ ...CARD, marginTop: 10 }}
+  >
+    <header style={HEADER}>
+      <div style={{ minWidth: 0 }}>
+        {entry.question.header === undefined
+          ? null
+          : <div style={{ marginBottom: 5, color: 'var(--dsw-alias-label-tertiary)', fontSize: 11, lineHeight: '16px' }}>
+              {entry.question.header}
+            </div>}
+        <h2 id={`dsh-question-${entry.key}`} style={{ margin: 0, fontSize: 16, lineHeight: '22px', fontWeight: 500 }}>
+          {entry.question.question}
+        </h2>
+      </div>
+      {/* Right corner: the countdown sits beside the dismiss key, matching the
+          blocking card's header action group. `onClose` only closes this local
+          card — it never cancels the queued question on the Agent's side. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        <Countdown askedAt={entry.askedAt} />
+        <button
+          type="button" style={ICON_BUTTON} disabled={locked}
+          aria-label="收起草稿（问题仍保留，可随时回来回答）"
+          title="收起草稿（问题仍保留，可随时回来回答）"
+          onClick={onClose}
+        >
+          <IconCloseOutline16 />
+        </button>
+      </div>
+    </header>
+
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, margin: '8px 0 0', padding: '4px 12px' }}>
+      {options.length === 0 ? null : <div role={multiSelect ? 'group' : 'radiogroup'}
+        aria-label={multiSelect ? '可多选' : '单选'}>
+        {options.map((option, optionIndex) => <OptionRow
+          key={option.label} index={optionIndex} label={option.label} description={option.description}
+          selected={selected.includes(option.label)} multiSelect={multiSelect} busy={locked}
+          onChoose={() => { choose(option.label) }} />)}
+      </div>}
+      {/* The free-text answer keeps the blocking card's inline row shape: an
+          option-shaped row whose copy is the field, lifted while it holds text. */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%', minHeight: 40, flexShrink: 0,
+        padding: '8px 12px 8px 8px', border: `1px solid ${custom === '' ? 'transparent' : 'var(--dsw-alias-border-l2)'}`,
+        borderRadius: 12, background: custom === '' ? 'transparent' : 'var(--dsw-alias-interactive-bg-hover)',
+      }}>
+        {multiSelect
+          ? <CheckBox checked={custom !== ''} />
+          : <span aria-hidden style={INDICATOR}><IconEditOutline16 size={12} /></span>}
+        <textarea aria-label="补充回答" value={custom} disabled={locked}
+          onChange={event => { setCustom(event.currentTarget.value) }}
+          placeholder="也可以不选选项，直接写想法"
+          style={{
+            flex: 1, minWidth: 0, minHeight: 32, padding: 0, border: 'none', outline: 'none',
+            background: 'transparent', resize: 'vertical',
+            font: 'inherit', fontSize: 14, lineHeight: '24px',
+            color: 'var(--dsw-alias-label-primary)', caretColor: 'var(--dsw-alias-state-business-primary)',
+          }} />
+      </div>
+    </div>
+
+    <footer style={FOOTER}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        <button type="button" style={{ ...ICON_BUTTON, color: 'var(--dsw-alias-label-dimmed)', cursor: 'default' }}
+          disabled aria-label="上一题（非阻塞问题逐条列出，无需翻页）">
+          <IconChevronLeftOutline14 />
+        </button>
+        <span style={{ ...READOUT, padding: '0 4px', wordSpacing: -2 }}>{index + 1} / {total}</span>
+        <button type="button" style={{ ...ICON_BUTTON, color: 'var(--dsw-alias-label-dimmed)', cursor: 'default' }}
+          disabled aria-label="下一题（非阻塞问题逐条列出，无需翻页）">
+          <IconChevronRightOutline14 />
+        </button>
+      </div>
+      <div role="status" style={{
+        flex: 1, minHeight: 16, color: 'var(--dsw-alias-state-error-primary)',
+        fontSize: 11, lineHeight: '16px', textAlign: 'right',
+      }}>{error}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <Button variant="outline" disabled={locked} onClick={() => { questionStore.close(entry, 'skipped') }}>跳过本题</Button>
+        <Button variant="primary" disabled={!canSubmit || locked} onClick={() => { void submit() }}>
+          {busy ? '发送中…' : submitted ? '已提交' : '提交'}
+        </Button>
+      </div>
+    </footer>
+  </section>
 }
 
 /**
@@ -250,7 +525,7 @@ export function QuestionDock({ sessionId, send }: DockProps) {
         Agent 想听听你的想法
       </span>
       <span style={{ flex: 'none', color: 'var(--dsw-alias-label-tertiary)', fontSize: 12 }}>
-        {entries.length > 1 ? `共 ${entries.length} 个 · ` : ''}它不会等你
+        {entries.length > 1 ? `共 ${entries.length} 个` : ''}
       </span>
       <span aria-hidden style={{ flex: 'none', color: 'var(--dsw-alias-label-tertiary)', fontSize: 10 }}>
         {collapsed ? '▲' : '▼'}
@@ -262,6 +537,9 @@ export function QuestionDock({ sessionId, send }: DockProps) {
             const entry = entries.find(candidate => candidate.key === expandedKey)
             if (entry === undefined) return null
             return <QuestionCard key={entry.key} entry={entry} send={answer}
+              index={entries.findIndex(candidate => candidate.key === entry.key)}
+              total={entries.length}
+              onClose={() => { setOpenKey(entries.find(candidate => candidate.key !== entry.key)?.key ?? entry.key) }}
               expanded={questionVisibility(entry.askedAt) === 'active' || openKey === entry.key} />
           })()
         : null}

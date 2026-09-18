@@ -50,6 +50,8 @@ export class QuestionStore {
   private readonly listeners = new Set<Listener>()
   private readonly snapshots = new Map<string, readonly QuestionEntry[]>()
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
+  /** One shared repaint clock, running only while something is actually open. */
+  private tickTimer: ReturnType<typeof setInterval> | undefined
   /** Bumped by every mutation; the render subscription's getSnapshot value. */
   private version = 0
 
@@ -114,7 +116,10 @@ export class QuestionStore {
       this.scheduleVisibility(entry)
       changed = true
     }
-    if (changed) this.publish()
+    if (changed) {
+      this.syncTick()
+      this.publish()
+    }
   }
 
   close(entry: QuestionEntry, state: 'answered' | 'skipped'): void {
@@ -125,6 +130,7 @@ export class QuestionStore {
     writeStored(next)
     this.clearTimer(entry.key)
     this.prune(entry.sessionId)
+    this.syncTick()
     this.publish()
   }
 
@@ -140,6 +146,7 @@ export class QuestionStore {
     }
     if (changed) {
       this.prune(sessionId)
+      this.syncTick()
       this.publish()
     }
   }
@@ -188,9 +195,41 @@ export class QuestionStore {
     this.timers.delete(key)
   }
 
-  /** Drop every pending accent timer. Used by tests and page teardown. */
+  /**
+   * Keep one repaint clock alive exactly while something is open.
+   *
+   * The card shows a per-second countdown, so the store needs to republish on a
+   * clock; `scheduleVisibility` cannot do it, being a single one-shot that
+   * fires only when the accent window closes. Starting and stopping here — with
+   * `enqueue`, `close` and `skipAll` as the only callers — means an idle page
+   * with nothing pending runs no timer at all.
+   *
+   * `unref`'d for the same reason as `scheduleVisibility`: this exists to
+   * repaint text, so it must never be why a browser-less host stays alive.
+   * Browsers throttle a backgrounded tab's interval, which is expected — the
+   * countdown is derived from `Date.now()`, so it shows the true remaining time
+   * the moment the tab is visible again rather than having drifted.
+   */
+  private syncTick(): void {
+    const open = [...this.entries.values()].some(entry => entry.state === 'open')
+    if (open && this.tickTimer === undefined) {
+      const timer = setInterval(() => { this.publish() }, 1000)
+      const unref = (timer as unknown as { unref?: () => void }).unref
+      if (typeof unref === 'function') unref.call(timer)
+      this.tickTimer = timer
+    } else if (!open && this.tickTimer !== undefined) {
+      clearInterval(this.tickTimer)
+      this.tickTimer = undefined
+    }
+  }
+
+  /** Drop every pending accent timer and the repaint clock. Used by tests and page teardown. */
   dispose(): void {
     for (const key of [...this.timers.keys()]) this.clearTimer(key)
+    if (this.tickTimer !== undefined) {
+      clearInterval(this.tickTimer)
+      this.tickTimer = undefined
+    }
     this.listeners.clear()
   }
 

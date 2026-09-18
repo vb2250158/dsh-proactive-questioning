@@ -68,6 +68,14 @@ test('the loader can execute the bundle and it registers both slot occurrences',
     const modules = {
       react: { useEffect: inert, useMemo: inert, useState: inert, useSyncExternalStore: inert },
       'react/jsx-runtime': { jsx: inert, jsxs: inert, Fragment: 'Fragment' },
+      // Every primitive the card renders with. A name the runtime does not
+      // export would be `undefined` on the page rather than a build error, so
+      // the stub deliberately offers exactly the ones the bundle asks for and
+      // fails on anything else.
+      '@deepseek-ai/dsh-client-ui-primitives': new Proxy({}, {
+        get: (_target, key) => (typeof key === 'string' && /^[A-Z]/.test(key) ? inert : undefined),
+        has: () => true,
+      }),
     }
     // `window.__ModuleLoader__.load({ id, factory })` is the loader's entry
     // point, while the same bare `require` is what the factory body calls.
