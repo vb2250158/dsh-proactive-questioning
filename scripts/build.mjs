@@ -10,6 +10,10 @@ const clientOutput = resolve(root, 'lib/client.js')
 const client = await build({
   entryPoints: [resolve(root, 'src/client/index.ts')], bundle: true, format: 'cjs', platform: 'browser',
   target: 'es2022', write: false, sourcemap: false, legalComments: 'none',
+  // Match the TypeScript `react-jsx` transform: without this esbuild defaults to the classic
+  // runtime and emits bare `React.createElement`, which the bundle never binds (it imports only
+  // named hooks) — every slot component then dies with `ReferenceError: React is not defined`.
+  jsx: 'automatic',
   external: ['react', 'react/jsx-runtime', '@deepseek-ai/*'], logLevel: 'silent',
 })
 const clientBundle = client.outputFiles.find(file => file.path.endsWith('.js')) ?? client.outputFiles[0]

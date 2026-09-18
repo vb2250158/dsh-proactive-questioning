@@ -17,6 +17,13 @@ pnpm check
 
 `pnpm build` 生成私有 DSH 插件的 Host 与 Web ModuleLoader bundle。加入 Web Profile、重启 DSH 并刷新网页后，新会话和已有会话的后续工具调用都可使用它。
 
+### 客户端构建必须用自动 JSX 运行时
+
+`scripts/build.mjs` 的 client 构建带 `jsx: 'automatic'`，产物里的 JSX 走 `react/jsx-runtime`。
+**不要删掉这一行**：esbuild 默认走经典运行时，会生成裸 `React.createElement`，而本插件的组件只从 `react` 具名导入 hooks、没有默认导入 `React`，
+于是每个槽位组件在渲染时抛 `ReferenceError: React is not defined`，槽位边界吞掉异常后用户什么也看不到——工具卡片和面板一起消失。
+源码侧看不出来（TS 本来就是 `react-jsx`），所以 `tests/client-bundle.test.mjs` 直接对 `lib/client.js` 断言，并由 `npm test` 兜住。
+
 ## 两条会话身份通道（改动前必读）
 
 - **工具行**：`tool.call.toolview` 的组件从 props 拿 `sessionId`——session 作用域的槽位组件会合并 `SessionStandardProps`。官方 `ask_user_question` 视图也是这么做的。

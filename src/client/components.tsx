@@ -141,6 +141,7 @@ function QuestionCard({ entry, send, expanded }: { entry: QuestionEntry, send: S
   const [custom, setCustom] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [submitted, setSubmitted] = useState(false)
   const options = entry.question.options ?? []
   const canSubmit = selected.length > 0 || custom.trim() !== ''
   const choose = (label: string) => {
@@ -149,10 +150,13 @@ function QuestionCard({ entry, send, expanded }: { entry: QuestionEntry, send: S
       : previous.includes(label) ? [] : [label])
   }
   const submit = async () => {
-    if (!canSubmit || busy) return
+    if (!canSubmit || busy || submitted) return
     setBusy(true); setError('')
     try {
       await send(answerText(entry, selected, custom.trim()))
+      // Latch before closing: the send has already been accepted, so a
+      // double click must not be able to post the same answer twice.
+      setSubmitted(true)
       questionStore.close(entry, 'answered')
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : '回答未能发送到此对话。')
@@ -182,8 +186,8 @@ function QuestionCard({ entry, send, expanded }: { entry: QuestionEntry, send: S
       }} /> : null}
     {error ? <p role="alert" style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--dsw-alias-state-error-primary)' }}>{error}</p> : null}
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-      <Action label={busy ? '发送中…' : '提交回答'} primary disabled={!canSubmit || busy} onClick={() => { void submit() }} />
-      <Action label="跳过" primary={false} disabled={busy} onClick={() => { questionStore.close(entry, 'skipped') }} />
+      <Action label={busy ? '发送中…' : submitted ? '已提交' : '提交回答'} primary disabled={!canSubmit || busy || submitted} onClick={() => { void submit() }} />
+      <Action label="跳过" primary={false} disabled={busy || submitted} onClick={() => { questionStore.close(entry, 'skipped') }} />
       {!custom.trim() && options.length > 0 && !expanded
         ? <span style={{ color: 'var(--dsw-alias-label-tertiary)', fontSize: 12 }}>也可以直接写下想法</span>
         : null}
@@ -234,7 +238,7 @@ export function QuestionDock({ sessionId, send }: DockProps) {
   const expandedKey = openKey ?? newest?.key
   if (entries.length === 0) return null
   const older = entries.filter(entry => entry.key !== expandedKey)
-  return <section style={PANEL} aria-label="待答的非阻塞问题">
+  return <section style={PANEL} aria-label="待答的非阻塞问题" data-dsh-proactive-questions>
     <button type="button" aria-expanded={!collapsed} onClick={() => { setCollapsed(value => !value) }}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '6px 12px',
