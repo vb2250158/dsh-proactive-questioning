@@ -66,7 +66,7 @@ test('the loader can execute the bundle and it registers both slot occurrences',
   let loaded
   const load = (specifier, factory) => {
     const modules = {
-      react: { useEffect: inert, useMemo: inert, useState: inert, useSyncExternalStore: inert },
+      react: { createContext: () => ({}), useContext: inert, useEffect: inert, useMemo: inert, useState: inert, useSyncExternalStore: inert },
       'react/jsx-runtime': { jsx: inert, jsxs: inert, Fragment: 'Fragment' },
       // Every primitive the card renders with. A name the runtime does not
       // export would be `undefined` on the page rather than a build error, so

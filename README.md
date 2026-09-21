@@ -1,43 +1,24 @@
 # DSH 主动提问（私有）
 
+## 0.1.6：图文说明与提问面板
+
+新增供对话增强渲染的公开内容插槽，支持问题与选项图文说明；提交仍保留原始选项标签。同步发布紧凑布局、分页草稿保留和会话服务解析修复。
+
 这是独立的 DSH 插件，不依赖 Rabi、RabiRoute、情感交流资料库、角色人格或任何真人聊天记录。
 
 它向所有 DSH 对话全局提供 `queue_user_question`：Agent 可以在推理时把一个可选问题放进当前对话，而工具立即成功返回，Agent 继续工作。问题不设超时；不回答不是同意，也不会使 Agent 卡住。
 
 界面是每个会话独立的。问题在 Agent 提问的那一刻就出现在输入框上方——不等工具返回，所以不会被后续输出挤到看不见的地方。面板里最新的问题展开成卡片，更早的未答问题折叠成单行（可单独“回答”或“跳过”）。提交回答会作为一条新的用户消息发送到该对话；跳过不发送消息，也不会篡改旧工具调用。浏览器仅保存关闭状态和首次显示时间，不另存问题正文或回答。
 
-卡片外观与官方阻塞式 `ask_user_question` 卡片同族：20px 圆角、`--dsw-specific-input-major` 底、`1 / 2` 页码位、单选编号指示器 / 多选复选框、`推荐` 徽标、描边的 `跳过本题` 与主色 `提交`。右上角多一个**倒计时**。
+## 提问面板
 
-卡片外观**照搬**官方阻塞式 `ask_user_question` 卡片，不是「看起来差不多」：20px 圆角、`--dsw-specific-input-major` 底、`--dsw-elevation-panel` 投影、`20px 16px 0 24px` 的头部内距、`0.5px` 描边、`1 / 2` 页码位、20×20 的单选编号指示器 / 多选复选框、`推荐` 徽标、描边的 `跳过本题` 与主色 `提交`。右上角比原卡片多一个**倒计时**。
+问题可带 `detail`，选项可带 `description`，各最多 12000 字符。配合新版 `dsh-chat-enhancement`，这些字段及 `question` 支持 Markdown 图文混排；`label` 保持短纯文本。图片写为 `![说明](https://example.com/image.png)` 或 `![说明](<C:/work folder/image.png>)`。图文通过公开的 session 插槽 `proactive.question.content` 渲染，只有显示文本传给扩展；缺少扩展时保留原文。选择按钮与图文分离，点图或链接不会误选，提交仍返回原始标签。
 
-这不是官方阻塞式 `ask_user_question` 的替代实现。它把“想听听你的看法”与“必须等待的批准/选择”分开：日常主动询问使用本插件，Agent 不得把沉默当作回答。外观对齐是为了让两种问题读起来像同一族控件，**不是**把语义也对齐——阻塞卡片会等，这张不会。
+面板与聊天内容列对齐，使用宿主主题颜色。选项以无边框列表展示，标题与说明同行并自动换行；选中时显示底色和勾选标记。自由回答区使用透明背景，底部操作保持可见。窄屏允许操作区换行，长选项在面板内滚动。新问题与保留的问题使用同一布局，桌面内容两侧留白 24px，窄屏留白 16px；选项使用 20px 行距、8px 上下内边距和 2px 间隔。
 
-## 样式是转写，不是重画
+多个问题可用页码箭头切换，单题隐藏分页。关闭按钮收起面板，问题仍保留；点击标题栏重新展开。提交发送回答，跳过不发送消息。
 
-`src/client/question-card.module.css` 是 `ui-user-questions/src/client/QuestionComposer.module.css` 的**逐条转写**。那份样式是包内 CSS Module，导不进来，所以属性是抄的、不是重新推的。原文件 132 条声明里 **125 条在这里逐字相同**。
-
-剩下 7 条不在这里，全是两侧「坐的位置不同」的结构性后果，每条都有明确理由（文件头注释里也写了同一份清单）：
-
-| 原声明 | 原选择器 | 为什么这里没有 |
-| --- | --- | --- |
-| `justify-content: center` | `.frame` | 输入框座位归 dock，没有居中框要复现 |
-| `padding: 6px calc(...) 10px` | `.frame` | 同上；侧向留白由 dock 提供 |
-| `max-width: var(--dsh-chat-content-width)` | `.card` | dock 已经限了宽，再来一层会重复计算 |
-| `max-height: min(60vh, 520px)` | `.card` | 这个座位要和 dock 标题栏分，改成 `min(40vh, 360px)` |
-| `max-height: none` | `.cardMinimized` | 这里没有「最小化」，收起是 dock 标题栏的职责 |
-| `padding-bottom: 14px` | `.cardMinimized .header` | 属于上面那个不存在的变体 |
-| `margin: 0 2px 8px` | `.detail` | 需要 `question.detail` 字段，本插件 store 没有对应物 |
-
-**这些是「不是设计决定」的数字。** 哪个值与原件不同了，那就是这个文件的 bug，不是选择。原卡片改了，两边一起改。
-
-`tests/stylesheet-fidelity.test.mjs` 每次跑 `npm test` 都**重新对原件比对一遍**（不是对一份冻结清单），所以：
-
-- 转写值被改动 → `every shared declaration is transcribed verbatim` 失败；
-- 偷偷少抄一条 → 同上失败（负控已验证）；
-- 清单里留了条原件已经删掉的「理由」→ `no deviation outlives its justification` 失败；
-- 原件自己变了 → 这里立刻看见漂移，而不是慢慢分叉。
-
-原件路径默认指向本机 harness 检出；找不到时这几条测试会带说明跳过，独立 clone 仍然全绿。
+布局由本插件维护，不再逐条复制阻塞式提问卡片。样式检查约束主题变量与可访问性，浏览器验证覆盖选中、输入、切换、收起及窄屏布局。
 
 ## 倒计时量的是「新鲜期」，不是截止时间
 
@@ -60,10 +41,10 @@ pnpm check
 
 | 手段 | 跑法 | 盯什么 |
 | --- | --- | --- |
-| 单元测试 | `npm test` | 协议、store、倒计时算术、重绘时钟、**样式转写保真度**。沙箱里渲染不出东西，**只能证明接线**。 |
+| 单元测试 | `npm test` | 协议、store、倒计时算术、重绘时钟、主题变量与滚动布局。沙箱里渲染不出东西，**只能证明接线**。 |
 | 产物测试 | `npm test`（含 `client-bundle.test.mjs`） | 直接对 `lib/client.js` 断言：不出现裸 `React.createElement`、两个槽位都注册。 |
 | 渲染冒烟 | `node tests/render-smoke.mjs` | 用真 React + jsdom 渲染**构建产物**，断言用户真正看到的东西，并盯住注入的样式表。 |
-| 视觉预览 | `npm run test:visual -- <chromium> <playwright-core> <out-dir> [dark\|light] [newest\|oldest]` | 在真 Chromium 里截图，肉眼看对齐结果。**这是「照搬得像不像」唯一能验的方式**——断言量不出「看起来是不是同一张卡」。 |
+| 视觉预览 | `npm run test:visual -- <chromium> <playwright-core> <out-dir> [dark\|light] [newest\|oldest]` | 检查选择、分页、草稿保留、收起和窄屏溢出，并输出深浅主题截图。 |
 
 `render-smoke.mjs` 补的是前两层都补不上的洞：**槽位边界会吞掉渲染异常**，所以「注册成功但一渲染就抛」在单元测试里是绿的、在用户那里是空的（经典 JSX 那次事故就是这样）。它顺带守住倒计时到点不关闭。它从外围 DSH 工作区借用 `react` / `react-dom` / `jsdom`，不是插件依赖，所以 `npm test` 保持零依赖；换工作区用 `--workspace <path>`。
 

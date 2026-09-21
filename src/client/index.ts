@@ -30,6 +30,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock',
     id: 'proactive-questioning-dock',
+    children: { 'proactive.question.content': { kind: 'single', scope: 'session' } },
     order: 15,
     locale: 'conversation',
     inject: (sessionId: unknown): { send?: (text: string) => Promise<unknown> } => ({

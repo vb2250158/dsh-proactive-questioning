@@ -149,7 +149,7 @@ const argsRaw = JSON.stringify({ questions: [
   { id: 'q2', question: '要加辣吗？', options: [{ label: '加' }, { label: '不加' }], multi_select: true },
 ] })
 const rowHost = mount(toolview.component, { sessionId: 'session-a', callId: 'call-1', block: { kind: 'result', call: { argsRaw } } })
-assert.match(rowHost.textContent, /已加入非阻塞问题/, 'the toolview must render its acknowledgement')
+assert.equal(rowHost.textContent, '待回答', 'the acknowledgement contains only the answer status')
 
 // 2. The dock renders the session's questions, newest one expanded.
 const dockHost = mount(dock.component, { sessionId: 'session-a', send: async () => undefined })
@@ -206,7 +206,7 @@ const settledRead = countdown().textContent
 const bar = dockHost.querySelector('button[aria-expanded]')
 act(() => { bar.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
 assert.ok(dockHost.querySelector('[data-dsh-question-card]') === null, 'collapsing must hide the card')
-assert.match(dockHost.textContent, /Agent 想听听你的想法/, 'collapsing must keep the bar')
+assert.match(dockHost.textContent, /需要你的意见/, 'collapsing must keep the bar')
 act(() => { bar.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
 
 // 7. The card must be STYLED, not merely structured. This is the assertion that
@@ -219,10 +219,9 @@ assert.ok(styles.length > 0, 'the bundle must inject its stylesheet')
 const sheet = styles.map(tag => tag.textContent).join('\n')
 assert.match(sheet, /\.\w+_card\b/, 'the stylesheet must scope the card class')
 for (const [declaration, why] of [
-  ['border-radius:20px', "the blocking card's 20px card radius"],
+  ['border-radius:20px', 'the dock radius'],
   ['background:var(--dsw-specific-input-major)', "the blocking card's input surface"],
-  ['box-shadow:var(--dsw-elevation-panel)', "the blocking card's panel elevation"],
-  ['padding:20px 16px 0 24px', "the blocking card's header insets"],
+  ['padding:0 24px 10px', 'the question header insets'],
   ['border-radius:6px', "the blocking card's 20x20 indicator geometry"],
   ['word-spacing:-2px', "the blocking card's pager type ramp"],
 ]) {

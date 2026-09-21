@@ -41,12 +41,19 @@ export function asSessionId(value: unknown): string | undefined {
 /**
  * Build the send verb for one Session.
  *
- * `ctx.sessions.scope(id).conversation.send` is the scope-addressed send
- * documented by `ui-conversation` ("address one via
- * `ctx.sessions.scope(id).conversation`"). Resolving per call rather than
- * once keeps the verb correct when the Session's Controller binding is
- * established after this occurrence mounts, and a missing scope surfaces as a
- * rejected promise instead of a crash in the composer.
+ * `ui-conversation` documents the scope-addressed send as "address one via
+ * `ctx.sessions.scope(id).conversation`", but a Cordis scope is not a plain
+ * object of services: the service has to be *claimed*
+ * (`Cordis Scope#get`). Reading it as a property compiles fine — the scope is
+ * `any`-shaped at the boundary — and fails at runtime with the framework's own
+ * `cannot get property "conversation" without inject`, which is what a user
+ * sees when they press 提交. The official caller does the same two steps and
+ * reports each failure separately (`ui-conversation/src/client/apply.ts:108-113`,
+ * and its own test at `tests/service-orchestration.client.spec.ts:48`).
+ *
+ * Resolving per call rather than once keeps the verb correct when the Session's
+ * Controller binding is established after this occurrence mounts, and a missing
+ * scope surfaces as a rejected promise instead of a crash in the composer.
  * @param ctx - the apply closure's client context.
  * @param sessionId - the occurrence's Session identity.
  * @returns a send function, or undefined when the session is unusable.
@@ -55,7 +62,14 @@ export function scopedSend(ctx: ClientContext, sessionId: string | undefined): (
   if (sessionId === undefined) return undefined
   return async (text: string): Promise<unknown> => {
     const scope = ctx.sessions?.scope?.(sessionId)
+    // Two distinct failures, reported separately: no scope means the Session
+    // has not been mounted on this page, while a scope that cannot hand over
+    // `conversation` means the service is absent from that Session's tree.
+    // Collapsing them into one message costs the reader the only clue that
+    // says which half is broken.
     if (scope === undefined) throw new Error('原对话尚未加载，无法发送回答。')
-    return await scope.conversation.send(text)
+    const conversation = scope.get('conversation')
+    if (conversation === undefined) throw new Error('原对话的会话服务当前不可用，无法发送回答。')
+    return await conversation.send(text)
   }
 }

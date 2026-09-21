@@ -37,6 +37,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           properties: {
             id: { type: 'string', required: true, description: 'Stable id within this tool call.' },
             question: { type: 'string', required: true, description: 'Specific concise question.' },
+            detail: { type: 'string', description: 'Optional explanatory Markdown, up to 12000 characters. With chat enhancement installed, mix text and images using ![alt](https://...) or an absolute local file path (use forward slashes on Windows; wrap paths containing spaces in angle brackets). Keep the question itself concise.' },
             header: { type: 'string', description: 'Optional short category heading.' },
             options: {
               type: 'array',
@@ -46,7 +47,7 @@ export function apply(ctx: Context, config: Config = {}): void {
                 additionalProperties: true,
                 properties: {
                   label: { type: 'string', required: true, description: 'Short choice label.' },
-                  description: { type: 'string', description: 'One-sentence tradeoff or impact.' },
+                  description: { type: 'string', description: 'Tradeoff or impact, up to 12000 characters. With chat enhancement installed, Markdown images may be interleaved with text, using the same syntax as detail. Keep label as a short plain-text choice.' },
                 },
               },
             },

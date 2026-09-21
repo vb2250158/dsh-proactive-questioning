@@ -6,7 +6,8 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Question, QuestionEntry } from './store.ts'
 import { questionStore } from './store.ts'
-import { questionRemainingSeconds, questionVisibility } from './lifecycle.mjs'
+import { QuestionContent, QuestionContentContext, type QuestionContentSlots } from './content.tsx'
+import { questionRemainingSeconds } from './lifecycle.mjs'
 import css from './question-card.module.css'
 
 type Send = (text: string) => Promise<unknown>
@@ -111,6 +112,7 @@ function AnswerField(props: AnswerFieldProps) {
         disabled={props.disabled}
         rows={1}
         placeholder={props.placeholder}
+        aria-label={props.placeholder}
         onFocus={props.onFocus}
         onChange={props.onChange}
         onKeyDown={props.onKeyDown}
@@ -180,6 +182,7 @@ function questionsFrom(block: unknown): Question[] {
       if (record.options !== undefined && options?.length !== record.options.length) return []
       questions.push({
         id: record.id, question: record.question,
+        ...typeof record.detail === 'string' ? { detail: record.detail } : {},
         ...typeof record.header === 'string' ? { header: record.header } : {},
         ...options === undefined ? {} : { options },
         ...record.multi_select === true ? { multiSelect: true } : {},
@@ -221,13 +224,7 @@ function answerText(entry: QuestionEntry, selected: string[], custom: string): s
   ].join('\n')
 }
 
-/**
- * One option row, shaped like the blocking card's.
- *
- * Single-select shows its ordinal in the indicator seat, multi-select swaps in a
- * checkbox; a preferred option carries the same 推荐 badge, parsed off the label
- * so a question written once reads the same on either surface.
- */
+/** 选项显示独立说明和选中标记，提交保留原始标签。 */
 function OptionRow({ index, option, selected, multiSelect, busy, onChoose }: {
   index: number
   option: { label: string, description?: string }
@@ -237,9 +234,13 @@ function OptionRow({ index, option, selected, multiSelect, busy, onChoose }: {
   onChoose: () => void
 }) {
   const display = parseRecommendedLabel(option.label)
-  return <button
+  return <div className={`${css.option} ${selected ? css.optionSelected : ''}`} onClick={event => {
+    if (busy || (event.target as Element).closest('button, a, img, input, textarea, [role="button"]') !== null) return
+    onChoose()
+  }}>
+  <button
     type="button"
-    className={`${css.option} ${selected && !multiSelect ? css.optionSelected : ''}`}
+    className={css.optionChoice}
     data-dsh-question-option
     data-selected={selected ? 'true' : 'false'}
     role={multiSelect ? 'checkbox' : 'radio'}
@@ -252,39 +253,32 @@ function OptionRow({ index, option, selected, multiSelect, busy, onChoose }: {
       ? <span className={`${css.checkbox} ${selected ? css.checkboxChecked : ''}`} aria-hidden="true">
           {selected && <IconCheckOutline14 size={12} />}
         </span>
-      : <span className={css.number}>{index + 1}</span>}
+      : <span className={css.number} aria-hidden="true">{selected ? <IconCheckOutline14 size={12} /> : index + 1}</span>}
     <span className={css.optionCopy}>
       <span className={css.optionLine}>
         <span className={css.optionLabel}>{display.label}</span>
         {display.recommended && <span className={css.badge}>{COPY.recommended}</span>}
-        {option.description !== undefined && <span className={css.description}>{option.description}</span>}
       </span>
     </span>
   </button>
+  {option.description !== undefined && <div className={css.description}><QuestionContent text={option.description} /></div>}
+  </div>
 }
 
-/**
- * One question card, shaped like the blocking card's `QuestionFlow`.
- *
- * Structure, class names and copy are the blocking card's; the deliberate
- * additions are the countdown in the header action group and the collapsed
- * variant for older questions. `expanded` is the only structural switch: false
- * keeps a one-line row so only the newest question costs a full card.
- *
- * @param props - the entry, the send verb, and the focus/positioning inputs.
- * @returns the card.
- */
-function QuestionCard({ entry, send, expanded, index, total, onClose }: {
+/** 单题编辑区；草稿由会话面板保存，分页与收起不丢失输入。 */
+function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }: {
   entry: QuestionEntry
   send: Send
-  expanded: boolean
   index: number
   total: number
   onClose: () => void
+  onNavigate: (index: number) => void
+  drafts: Map<string, { selected: string[], custom: string }>
 }) {
   const question = entry.question
-  const [selected, setSelected] = useState<string[]>([])
-  const [custom, setCustom] = useState('')
+  const [selected, setSelected] = useState<string[]>(() => drafts.get(entry.key)?.selected ?? [])
+  const [custom, setCustom] = useState(() => drafts.get(entry.key)?.custom ?? '')
+  useEffect(() => { drafts.set(entry.key, { selected, custom }) }, [drafts, entry.key, selected, custom])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -300,6 +294,7 @@ function QuestionCard({ entry, send, expanded, index, total, onClose }: {
   const last = index === total - 1
 
   const choose = (label: string): void => {
+    if (!multiSelect) setCustom('')
     setSelected(current => multiSelect
       ? current.includes(label) ? current.filter(item => item !== label) : [...current, label]
       : current.includes(label) ? [] : [label])
@@ -336,33 +331,6 @@ function QuestionCard({ entry, send, expanded, index, total, onClose }: {
     void submit()
   }
 
-  // The collapsed variant keeps its one-line row and drops the card chrome:
-  // only the newest question is worth a full card, older ones stay cheap.
-  if (!expanded) {
-    return <div className={css.cardOlder} role="group" aria-label={question.question}>
-      <div style={{ fontSize: 13, lineHeight: '20px', whiteSpace: 'pre-wrap' }}>{question.question}</div>
-      <div className={css.options} style={{ margin: '8px 0 0', padding: 0 }}>
-        {options.map((option, optionIndex) => <OptionRow
-          key={`${option.label}-${String(optionIndex)}`} index={optionIndex} option={option}
-          selected={selected.includes(option.label)} multiSelect={multiSelect} busy={locked}
-          onChoose={() => { choose(option.label) }} />)}
-      </div>
-      <AnswerField
-        variant="block" value={custom} disabled={locked} placeholder={COPY.customPlaceholder}
-        onChange={draftCustom} onKeyDown={continueFromCustom} />
-      <footer className={css.footer}>
-        <div />
-        <div className={css.feedback} role="status">{error}</div>
-        <div className={css.footerActions}>
-          <Button variant="outline" disabled={locked} onClick={() => { questionStore.close(entry, 'skipped') }}>{COPY.skip}</Button>
-          <Button variant="primary" disabled={!answered || locked} onClick={() => { void submit() }}>
-            {busy ? '发送中…' : submitted ? '已提交' : '提交'}
-          </Button>
-        </div>
-      </footer>
-    </div>
-  }
-
   return <section
     className={css.card}
     data-dsh-question-card
@@ -371,7 +339,7 @@ function QuestionCard({ entry, send, expanded, index, total, onClose }: {
     <header className={css.header}>
       <div className={css.headingBlock}>
         {question.header !== undefined && <div className={css.eyebrow}>{question.header}</div>}
-        <h2 className={css.title} id={`dsh-question-${entry.key}`}>{question.question}</h2>
+        <div className={css.title} role="heading" aria-level={2} id={`dsh-question-${entry.key}`}><QuestionContent text={question.question} /></div>
       </div>
       {/* Right corner: the countdown joins the close key on the same icon-button
           grid, so the group's right edge matches the blocking card's. `onClose`
@@ -389,14 +357,14 @@ function QuestionCard({ entry, send, expanded, index, total, onClose }: {
     </header>
 
     <div className={css.body}>
+      {question.detail !== undefined && <div className={css.detail}><QuestionContent text={question.detail} /></div>}
       <div className={css.options} role={multiSelect ? 'group' : 'radiogroup'}>
         {options.map((option, optionIndex) => <OptionRow
           key={`${option.label}-${String(optionIndex)}`} index={optionIndex} option={option}
           selected={selected.includes(option.label)} multiSelect={multiSelect} busy={locked}
           onChoose={() => { choose(option.label) }} />)}
 
-        {/* The custom-answer row follows the option rows, exactly as the blocking
-            card's does; an optionless question swaps it for the framed block. */}
+
         {hasOptions
           ? <div className={`${css.customRow} ${custom !== '' ? css.customRowActive : ''}`}>
               {multiSelect
@@ -417,17 +385,17 @@ function QuestionCard({ entry, send, expanded, index, total, onClose }: {
     </div>
 
     <footer className={css.footer}>
-      <div className={css.pager}>
+      <div className={css.pager} hidden={total === 1}>
         <button
           type="button" className={css.iconButton} aria-label={COPY.prev}
-          disabled={index === 0 || locked} onClick={() => { setError('') }}
+          disabled={index === 0 || locked} onClick={() => { onNavigate(index - 1) }}
         >
           <IconChevronLeftOutline14 />
         </button>
         <span className={css.progress}>{index + 1} / {total}</span>
         <button
           type="button" className={css.iconButton} aria-label={COPY.next}
-          disabled={last || locked} onClick={() => { setError('') }}
+          disabled={last || locked} onClick={() => { onNavigate(index + 1) }}
         >
           <IconChevronRightOutline14 />
         </button>
@@ -459,10 +427,7 @@ export function QueuedQuestionToolRow({ block, callId, sessionId }: {
     questionStore.enqueue(sessionId, callId, questions)
   }, [sessionId, callId, signature])
   return <div className={css.toolRow}>
-    <strong className={css.toolRowTitle}>已加入非阻塞问题</strong>
-    <p className={css.toolRowNote}>
-      Agent 已继续处理，不会等你的回答。问题会留在输入框上方，直到你回答或跳过。
-    </p>
+    <strong className={css.toolRowTitle}>待回答</strong>
   </div>
 }
 
@@ -471,9 +436,14 @@ export function QueuedQuestionToolRow({ block, callId, sessionId }: {
  * for as long as any question is unanswered: the newest one is open for
  * composing an answer, the older ones collapse into one-line rows.
  */
-export function QuestionDock({ sessionId, send }: DockProps) {
+export function QuestionDock(props: DockProps & Partial<QuestionContentSlots>) {
+  return <QuestionContentContext.Provider value={props.renderSlot}><QuestionDockBody {...props} /></QuestionContentContext.Provider>
+}
+
+function QuestionDockBody({ sessionId, send }: DockProps) {
   const target = typeof sessionId === 'string' && sessionId !== '' ? sessionId : undefined
   const entries = useQuestions(target)
+  const drafts = useMemo(() => new Map<string, { selected: string[], custom: string }>(), [target])
   const [openKey, setOpenKey] = useState<string | undefined>(undefined)
   const [collapsed, setCollapsed] = useState(false)
   const answer = send ?? (() => Promise.reject(new Error('原对话尚未加载，无法发送回答。')))
@@ -486,11 +456,11 @@ export function QuestionDock({ sessionId, send }: DockProps) {
   const expandedKey = openKey ?? newest?.key
   if (entries.length === 0) return null
   const older = entries.filter(entry => entry.key !== expandedKey)
-  return <section className={css.dock} aria-label="待答的非阻塞问题" data-dsh-proactive-questions>
+  return <section className={css.dock} aria-label="待回答的问题" data-dsh-proactive-questions>
     <button type="button" className={css.dockBar} aria-expanded={!collapsed}
       onClick={() => { setCollapsed(value => !value) }}>
-      <span aria-hidden style={{ display: 'grid', placeItems: 'center', color: 'var(--dsw-alias-label-tertiary)' }}>💬</span>
-      <span className={css.dockTitle}>Agent 想听听你的想法</span>
+
+      <span className={css.dockTitle}>需要你的意见</span>
       <span className={css.dockCount}>{entries.length > 1 ? `共 ${entries.length} 个` : ''}</span>
       <span aria-hidden className={css.dockCaret}>{collapsed ? '▲' : '▼'}</span>
     </button>
@@ -502,8 +472,10 @@ export function QuestionDock({ sessionId, send }: DockProps) {
             return <QuestionCard key={entry.key} entry={entry} send={answer}
               index={entries.findIndex(candidate => candidate.key === entry.key)}
               total={entries.length}
-              onClose={() => { setOpenKey(entries.find(candidate => candidate.key !== entry.key)?.key ?? entry.key) }}
-              expanded={questionVisibility(entry.askedAt) === 'active' || openKey === entry.key} />
+              drafts={drafts}
+              onClose={() => { setCollapsed(true) }}
+              onNavigate={index => { setOpenKey(entries[index]?.key) }}
+              />
           })()
         : null}
       {older.map(entry => <div key={entry.key} className={css.olderRow}>

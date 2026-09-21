@@ -1,7 +1,7 @@
 import { ACTIVE_WINDOW_MS } from './lifecycle.mjs'
 
 export type QuestionOption = { label: string, description?: string }
-export type Question = { id: string, question: string, header?: string, options?: QuestionOption[], multiSelect?: boolean }
+export type Question = { id: string, question: string, detail?: string, header?: string, options?: QuestionOption[], multiSelect?: boolean }
 export type QuestionEntry = {
   key: string
   sessionId: string

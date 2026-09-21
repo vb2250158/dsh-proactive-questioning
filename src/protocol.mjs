@@ -28,6 +28,7 @@ export function normalizeQuestions(value) {
     ids.add(id)
     const question = text(item.question, `第 ${index + 1} 个问题`, 1200)
     const header = item.header === undefined ? undefined : text(item.header, `第 ${index + 1} 个问题标题`, 120)
+    const detail = item.detail === undefined ? undefined : text(item.detail, `第 ${index + 1} 个问题说明`, 12000)
     let options
     if (item.options !== undefined) {
       if (!Array.isArray(item.options) || item.options.length === 0 || item.options.length > MAX_OPTIONS) {
@@ -41,7 +42,7 @@ export function normalizeQuestions(value) {
         labels.add(label)
         return {
           label,
-          ...(option.description === undefined ? {} : { description: text(option.description, `第 ${index + 1} 个问题的选项说明`, 360) }),
+          ...(option.description === undefined ? {} : { description: text(option.description, `第 ${index + 1} 个问题的选项说明`, 12000) }),
         }
       })
     }
@@ -49,6 +50,7 @@ export function normalizeQuestions(value) {
     return {
       id,
       question,
+      ...(detail === undefined ? {} : { detail }),
       ...(header === undefined ? {} : { header }),
       ...(options === undefined ? {} : { options }),
       ...(item.multi_select === true ? { multiSelect: true } : {}),

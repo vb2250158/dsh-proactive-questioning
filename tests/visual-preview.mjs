@@ -90,7 +90,10 @@ const page = `
     font-family: "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
     padding: 24px;
   }
-  #stage { width: 720px; max-width: 100%; }
+  #stage { width: 100%; max-width: 100%; }
+  [data-prim="Button"] { font: inherit; padding: 8px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; color: var(--dsw-alias-label-primary); background: transparent; }
+  [data-variant="primary"] { background: var(--dsw-alias-label-primary); color: var(--dsw-alias-label-primary-foreground); }
+  [data-prim="Button"]:disabled { opacity: .4; }
 </style></head>
 <body><div id="stage"></div></body></html>`
 
@@ -162,7 +165,7 @@ await live.addScriptTag({ content: `
               }
               return Glyph
             }
-            const Stub = props => window.React.createElement('span', { 'data-prim': key }, props?.children ?? null)
+            const Stub = props => { const { variant, children, ...rest } = props; return window.React.createElement('button', { ...rest, 'data-prim': key, 'data-variant': variant }, children) }
             return Stub
           }, has: () => true })
         }
@@ -204,13 +207,14 @@ const rendered = await live.evaluate(({ questionsJson, themeName, expand }) => {
   }))
   return new Promise(resolve => {
     setTimeout(() => {
+      if (expand === 'aged') { const now = Date.now(); Date.now = () => now + 130000 }
       ReactDOM.createRoot(dockBox).render(React.createElement(dock.component, { sessionId: 's1', send: async () => undefined }))
       setTimeout(() => {
         // The dock expands its NEWEST question by default. Clicking the older
         // row's 回答 moves the full card onto that one, which is how the
         // single-select variant (ordinal indicators, 推荐 badge, pager) gets its
         // own review. `expand=oldest` therefore means "click 回答 once".
-        if (expand !== 'newest') {
+        if (expand === 'oldest') {
           const open = [...document.querySelectorAll('[data-dsh-proactive-questions] button')]
             .find(button => button.textContent === '回答')
           open?.click()
@@ -221,20 +225,70 @@ const rendered = await live.evaluate(({ questionsJson, themeName, expand }) => {
   })
 }, {
   questionsJson: JSON.stringify([
-    { id: 'q1', header: '午餐', question: '午餐吃面还是饭？', options: [
-      { label: '面 (recommended)', description: '更快' }, { label: '饭' },
+    { id: 'q1', header: 'UnitInfo · 配置方案', question: '“卡池解锁标注”需要面向谁展示？', options: [
+      { label: '仅配置表备注 (recommended)', description: '标明卡池来源或解锁条件，供配置维护时查看。' }, { label: '玩家可见提示', description: '在游戏内展示解锁条件，需要确定页面和提示内容。' }, { label: '两者都需要', description: '同时完善配置备注与玩家界面的提示。' },
     ] },
-    { id: 'q2', question: '要加辣吗？', options: [{ label: '加' }, { label: '不加' }], multi_select: true },
+    { id: 'q2', question: '首批需要覆盖哪些内容？', options: [{ label: '已有单位' }, { label: '新增单位' }], multi_select: true },
   ]),
   themeName: theme,
   expand,
 })
 
+if (await live.locator('[data-dsh-question-card]').count() !== 1) throw new Error('initial question must use the padded card, including aged questions')
 console.log('style tags injected by the bundle:', rendered.styleTags)
 console.log('console errors:', problems.length === 0 ? 'none' : problems.join(' | '))
 
+if (expand === 'oldest') await live.getByRole('button', { name: '下一题', exact: true }).click()
+await live.getByRole('checkbox').first().click()
+if (await live.getByRole('checkbox').first().getAttribute('aria-checked') !== 'true') throw new Error('selection failed')
+await live.getByRole('button', { name: '上一题', exact: true }).click()
+if (await live.getByRole('radio').count() !== 3) throw new Error('previous question failed')
+await live.getByRole('radio').first().click()
+await live.getByRole('button', { name: '收起草稿（问题仍保留，可随时回来回答）' }).click()
+if (await live.locator('[data-dsh-question-card]').count() !== 0) throw new Error('collapse failed')
+await live.getByRole('button', { name: /需要你的意见/ }).click()
+await live.getByRole('textbox').fill('可以补充说明')
+if (await live.getByRole('radio').first().getAttribute('aria-checked') !== 'false') throw new Error('custom answer exclusivity failed')
+await live.getByRole('radio').first().click()
+if (await live.getByRole('textbox').inputValue() !== '') throw new Error('option must replace custom answer')
+await live.getByRole('button', { name: '下一题', exact: true }).click()
+if (await live.getByRole('checkbox').first().getAttribute('aria-checked') !== 'true') throw new Error('navigation lost draft')
+await live.getByRole('button', { name: '上一题', exact: true }).click()
+if (process.env.RABI_QUESTION_SOURCE) {
+  const voiceSource = readFileSync(process.env.RABI_QUESTION_SOURCE, 'utf8').replace("import * as React from 'react'", 'const React = window.React')
+  await live.addScriptTag({ type: 'module', content: voiceSource + '\nwindow.attachQuestionVoice = attachRabiQuestionExtras; window.questionVoiceCopy = rabiQuestionLocales.zh;' })
+  await live.waitForFunction(() => typeof window.attachQuestionVoice === 'function')
+  await live.evaluate(() => window.attachQuestionVoice(document.getElementById('stage'), { sessionId: 'test', t: key => window.questionVoiceCopy[key] }))
+}
+async function checkVoiceRow() {
+  if (!process.env.RABI_QUESTION_SOURCE) return
+  const mic = await live.locator('[data-rabi-question-mic]').boundingBox()
+  const toggle = await live.getByRole('switch', { name: '自动语音输入' }).boundingBox()
+  if (!mic || !toggle || Math.abs(mic.y + mic.height / 2 - toggle.y - toggle.height / 2) > 2 || mic.x < toggle.x) throw new Error('automatic voice toggle must sit beside the microphone')
+  console.log('PASS: automatic voice toggle and microphone share a row')
+}
+await checkVoiceRow()
+const insets = await live.locator('[data-dsh-question-card]').evaluate(card => {
+  const box = card.getBoundingClientRect()
+  const title = card.querySelector('h2').getBoundingClientRect()
+  const option = card.querySelector('[data-dsh-question-option]').getBoundingClientRect()
+  if (option.height > 58) throw new Error('two-line option is too tall: ' + option.height)
+  const bar = card.parentElement.previousElementSibling.getBoundingClientRect()
+  if (box.top - bar.bottom > 1) throw new Error('extra gap between header bar and question')
+  return { title: title.left - box.left, left: option.left - box.left, right: box.right - option.right }
+})
+if (Object.values(insets).some(value => value < 23)) throw new Error('question or options touch the edge: ' + JSON.stringify(insets))
+if (expand === 'aged' && await live.locator('[data-dsh-question-countdown]').textContent() !== '已保留') throw new Error('aged fixture not exercised')
+console.log('question/option insets:', insets)
 const suffix = expand === 'newest' ? '' : `-${expand}`
 const out = join(outDir, `question-card-${theme}${suffix}.png`)
 await live.locator('#stage').screenshot({ path: out })
 console.log('wrote', out)
+await live.setViewportSize({ width: 390, height: 844 })
+await checkVoiceRow()
+const overflow = await live.evaluate(() => document.documentElement.scrollWidth > innerWidth)
+if (overflow) throw new Error('mobile horizontal overflow')
+await live.locator('#stage').screenshot({ path: join(outDir, `question-card-${theme}-mobile.png`) })
+if (problems.length) throw new Error(problems.join(' | '))
+console.log('PASS: selection, pager, collapse, input, mobile overflow')
 await browser.close()

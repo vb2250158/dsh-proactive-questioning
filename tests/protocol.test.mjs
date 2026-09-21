@@ -19,6 +19,16 @@ test('rejects duplicate ids and invalid optional choices', () => {
   assert.throws(() => normalizeQuestions({ questions: [{ id: 'x', question: 'A', options: [] }] }), /选项数量无效/)
 })
 
+test('保留图文说明与原始标签，并拒绝超长或错误类型的正文', () => {
+  const detail = '说明前\n\n![示意图](<C:/work folder/a.png>)\n\n说明后'
+  const option = { label: '方案 A (推荐)', description: '文字\n\n![预览](https://example.test/a.png)' }
+  assert.deepEqual(normalizeQuestions({ questions: [{ id: 'q', question: '选择布局', detail, options: [option] }] }), [{ id: 'q', question: '选择布局', detail, options: [option] }])
+  for (const invalid of [42, '', 'x'.repeat(12001)]) {
+    assert.throws(() => normalizeQuestions({ questions: [{ id: 'q', question: '选择布局', detail: invalid }] }))
+    assert.throws(() => normalizeQuestions({ questions: [{ id: 'q', question: '选择布局', options: [{ label: 'A', description: invalid }] }] }))
+  }
+})
+
 test('the "new" accent window is long enough to survive a long Agent turn', () => {
   // The window used to be 30s. It only controls the visual accent now, but a
   // short accent made a question the user never saw arrive with no emphasis at
