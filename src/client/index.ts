@@ -1,4 +1,10 @@
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { QueuedQuestionToolRow, QuestionDock } from './components.tsx'
 import { asSessionId, scopedSend } from './host.ts'
 
@@ -33,8 +39,6 @@ export function apply(ctx: ClientContext): void {
     children: { 'proactive.question.content': { kind: 'single', scope: 'session' } },
     order: 15,
     locale: 'conversation',
-    inject: (sessionId: unknown): { send?: (text: string) => Promise<unknown> } => ({
-      send: scopedSend(ctx, asSessionId(sessionId)),
-    }),
+    inject: (sessionId: unknown): { send?: (text: string) => Promise<unknown> } => { const send = scopedSend(ctx, asSessionId(sessionId)); return send === undefined ? {} : { send } },
   }, QuestionDock))
 }

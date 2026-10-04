@@ -1,5 +1,7 @@
 # DSH 主动提问（私有）
 
+This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compatibility details](docs/dsh-0.2-compatibility.md).
+
 ## 0.1.6：图文说明与提问面板
 
 新增供对话增强渲染的公开内容插槽，支持问题与选项图文说明；提交仍保留原始选项标签。同步发布紧凑布局、分页草稿保留和会话服务解析修复。

@@ -67,7 +67,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    execute(args) {
+    async execute(args) {
       return queuedResult(normalizeQuestions(args))
     },
   }))

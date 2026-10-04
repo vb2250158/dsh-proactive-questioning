@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ChangeEvent, KeyboardEvent } from 'react'
 import {
-  Button, IconCheckOutline14, IconChevronLeftOutline14,
-  IconChevronRightOutline14, IconCloseOutline16, IconEditOutline16,
+  Button, IconCheckOutlineRegular, IconChevronLeftOutlineRegular,
+  IconChevronRightOutlineRegular, IconCloseOutlineRegular, IconEditOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Question, QuestionEntry } from './store.ts'
 import { questionStore } from './store.ts'
@@ -179,7 +179,7 @@ function questionsFrom(block: unknown): Question[] {
                 ? { description: (option as Record<string, unknown>).description as string } : {},
             }] : [])
         : undefined
-      if (record.options !== undefined && options?.length !== record.options.length) return []
+      if (record.options !== undefined && (!Array.isArray(record.options) || options?.length !== record.options.length)) return []
       questions.push({
         id: record.id, question: record.question,
         ...typeof record.detail === 'string' ? { detail: record.detail } : {},
@@ -251,9 +251,9 @@ function OptionRow({ index, option, selected, multiSelect, busy, onChoose }: {
   >
     {multiSelect
       ? <span className={`${css.checkbox} ${selected ? css.checkboxChecked : ''}`} aria-hidden="true">
-          {selected && <IconCheckOutline14 size={12} />}
+          {selected && <IconCheckOutlineRegular size={12} />}
         </span>
-      : <span className={css.number} aria-hidden="true">{selected ? <IconCheckOutline14 size={12} /> : index + 1}</span>}
+      : <span className={css.number} aria-hidden="true">{selected ? <IconCheckOutlineRegular size={12} /> : index + 1}</span>}
     <span className={css.optionCopy}>
       <span className={css.optionLine}>
         <span className={css.optionLabel}>{display.label}</span>
@@ -351,7 +351,7 @@ function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }
           type="button" className={css.iconButton} aria-label={COPY.close} title={COPY.close}
           disabled={locked} onClick={onClose}
         >
-          <IconCloseOutline16 />
+          <IconCloseOutlineRegular />
         </button>
       </div>
     </header>
@@ -369,9 +369,9 @@ function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }
           ? <div className={`${css.customRow} ${custom !== '' ? css.customRowActive : ''}`}>
               {multiSelect
                 ? <span className={`${css.checkbox} ${custom !== '' ? css.checkboxChecked : ''}`} aria-hidden="true">
-                    {custom !== '' && <IconCheckOutline14 size={12} />}
+                    {custom !== '' && <IconCheckOutlineRegular size={12} />}
                   </span>
-                : <span className={css.number} aria-hidden="true"><IconEditOutline16 size={12} /></span>}
+                : <span className={css.number} aria-hidden="true"><IconEditOutlineRegular size={12} /></span>}
               <AnswerField
                 variant="inline" value={custom} disabled={locked} placeholder={COPY.customPlaceholder}
                 onChange={draftCustom} onKeyDown={continueFromCustom} />
@@ -390,14 +390,14 @@ function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }
           type="button" className={css.iconButton} aria-label={COPY.prev}
           disabled={index === 0 || locked} onClick={() => { onNavigate(index - 1) }}
         >
-          <IconChevronLeftOutline14 />
+          <IconChevronLeftOutlineRegular />
         </button>
         <span className={css.progress}>{index + 1} / {total}</span>
         <button
           type="button" className={css.iconButton} aria-label={COPY.next}
           disabled={last || locked} onClick={() => { onNavigate(index + 1) }}
         >
-          <IconChevronRightOutline14 />
+          <IconChevronRightOutlineRegular />
         </button>
       </div>
       <div className={css.feedback} role="status">{error}</div>

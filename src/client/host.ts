@@ -23,7 +23,13 @@
  * this module does is turn the positional `sessionId` into the two things the
  * dock needs: a validated id, and a send verb addressed to that id.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 
 /**
  * Narrow an inject argument to a usable Session id.
@@ -34,8 +40,8 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
  * @param value - the inject factory's first argument.
  * @returns the id when it is a non-empty string.
  */
-export function asSessionId(value: unknown): string | undefined {
-  return typeof value === 'string' && value !== '' ? value : undefined
+export function asSessionId(value: unknown): SessionId | undefined {
+  return typeof value === 'string' && value !== '' ? value as SessionId : undefined
 }
 
 /**
@@ -58,7 +64,7 @@ export function asSessionId(value: unknown): string | undefined {
  * @param sessionId - the occurrence's Session identity.
  * @returns a send function, or undefined when the session is unusable.
  */
-export function scopedSend(ctx: ClientContext, sessionId: string | undefined): ((text: string) => Promise<unknown>) | undefined {
+export function scopedSend(ctx: ClientContext, sessionId: SessionId | undefined): ((text: string) => Promise<unknown>) | undefined {
   if (sessionId === undefined) return undefined
   return async (text: string): Promise<unknown> => {
     const scope = ctx.sessions?.scope?.(sessionId)
