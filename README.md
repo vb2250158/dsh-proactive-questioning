@@ -66,3 +66,7 @@ pnpm check
 - **输入框上方面板**：`conversation.input.dock` 是 session 作用域，注册时的 `inject` 工厂收到的是**位置参数** `inject(sessionId)`，不是 props 对象。
 
 写成 `inject: (props) => props.sessionId` 会让每个 occurrence 都解析不到会话，面板永远返回 `null` —— 这正是「问题从来没弹出来」的根因。参照 `ui-goal` 的 `GoalDock`（占同一槽位）：`inject: (sessionId) => …`。详见 `docs/DESIGN.md`。
+
+## Plugin display metadata
+
+The plugin list shows **Proactive questions** in English and **主动提问** in Chinese, following the DSH interface language. `locale/en.json` and `locale/zh.json` provide the title and description; `icon.svg` supplies self-contained artwork. The package exports and publishes these resources. The icon is adapted from Lucide; see [ICON_LICENSE.txt](ICON_LICENSE.txt).
