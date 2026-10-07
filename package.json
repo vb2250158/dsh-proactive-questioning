@@ -1,6 +1,6 @@
 {
   "name": "dsh-proactive-questioning",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "description": "Private DSH non-blocking, per-conversation user-question bubbles.",
   "type": "module",
