@@ -47,6 +47,7 @@ pnpm check
 | 产物测试 | `npm test`（含 `client-bundle.test.mjs`） | 直接对 `lib/client.js` 断言：不出现裸 `React.createElement`、两个槽位都注册。 |
 | 渲染冒烟 | `node tests/render-smoke.mjs` | 用真 React + jsdom 渲染**构建产物**，断言用户真正看到的东西，并盯住注入的样式表。 |
 | 视觉预览 | `npm run test:visual -- <chromium> <playwright-core> <out-dir> [dark\|light] [newest\|oldest]` | 检查选择、分页、草稿保留、收起和窄屏溢出，并输出深浅主题截图。 |
+| 对话列几何 | `node tests/measure-dock.mjs <chromium> <playwright-core>`，设置 `DSH_SOURCE_ROOT` | 使用已安装的 React 18，测量四种对话列宽度；渲染错误或空卡片会失败，仅测试深色主题。 |
 
 `render-smoke.mjs` 补的是前两层都补不上的洞：**槽位边界会吞掉渲染异常**，所以「注册成功但一渲染就抛」在单元测试里是绿的、在用户那里是空的（经典 JSX 那次事故就是这样）。它顺带守住倒计时到点不关闭。它从外围 DSH 工作区借用 `react` / `react-dom` / `jsdom`，不是插件依赖，所以 `npm test` 保持零依赖；换工作区用 `--workspace <path>`。
 
