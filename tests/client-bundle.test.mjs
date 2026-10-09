@@ -62,6 +62,7 @@ test('the bundle reaches the JSX runtime through the loader require it uses', ()
 
 test('the loader can execute the bundle and it registers both slot occurrences', () => {
   const registered = []
+  const declarations = new Set()
   const inert = () => {}
   let loaded
   const load = (specifier, factory) => {
@@ -116,7 +117,14 @@ test('the loader can execute the bundle and it registers both slot occurrences',
   // through `slots.register` is what carries the declaration.
   apply({ effect: fn => fn(), locale: { register: () => () => {} }, slots: {
     inject: (_key, callback) => { callback(); return () => {} },
-    register: (registration) => { registered.push(registration); return () => {} },
+    register: (registration) => {
+      for (const name of Object.keys(registration.children ?? {})) {
+        assert.equal(declarations.has(name), false, `slot ${name} has more than one declaring owner`)
+        declarations.add(name)
+      }
+      registered.push(registration)
+      return () => {}
+    },
   } })
 
   assert.equal(registered.map(entry => entry.name).sort().join(','),

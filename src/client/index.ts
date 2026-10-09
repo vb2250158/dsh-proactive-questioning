@@ -19,7 +19,6 @@ export function apply(ctx: ClientContext): void {
   for (const key of ['user', 'steering'] as const) {
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
       name: 'conversation.chat.node', key, priority: 100, locale: 'proactive-answer',
-      children: { 'proactive.question.content': { kind: 'single', scope: 'session' } },
     }, AnswerMessageView))
   }
   /**

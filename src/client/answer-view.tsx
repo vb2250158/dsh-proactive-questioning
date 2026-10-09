@@ -7,11 +7,10 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { parseAnswerText } from './answer-message.mjs'
 import { parseRecommendedLabel } from './components.tsx'
-import { QuestionContent, QuestionContentContext, type QuestionContentSlots } from './content.tsx'
 import css from './answer-view.module.css'
 
 /** Render recognized answers as receipts; retain text, attachments, references and copy for all other messages. */
-export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steering'>, 't'> & Partial<QuestionContentSlots> & {
+export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steering'>, 't'> & {
   t: (key: string, values?: Record<string, string | number>) => string
 }) {
   const { node, renderMessageImages, openFile, openSkill, t } = props
@@ -47,8 +46,7 @@ export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steeri
   const extra = data.content.filter(block => !['text', 'image', 'file'].includes(block.type))
   const references = data.referenceLabels ?? []
   const time = new Date(data.time)
-  return <QuestionContentContext.Provider value={props.renderSlot}>
-    <div className={css.row} data-dsh-answer-message={answer === undefined ? undefined : ''}>
+  return <div className={css.row} data-dsh-answer-message={answer === undefined ? undefined : ''}>
       <div className={css.stack}>
         {attachments.length > 0 && <div className={css.attachments} data-message-attachments>
           {attachments.map((block, index) => block.type === 'image'
@@ -65,7 +63,7 @@ export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steeri
             <span className={css.heading}><IconCheckOutlineRegular size={16} />{t('answer')}</span>
             <Tag tone="success">{t('answered')}</Tag>
           </header>
-          <div className={css.question}><QuestionContent text={answer.question} /></div>
+          <div className={css.question}>{projectUserText(answer.question, [], [], 'skill', { openFile, openSkill })}</div>
           <div className={css.answer}>
             {answer.selected.length > 0 && <ul className={css.selections}>
               {answer.selected.map((label: string, index: number) => <li key={index}><IconCheckOutlineRegular size={14} /><span>{parseRecommendedLabel(label).label}</span></li>)}
@@ -91,5 +89,4 @@ export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steeri
         {copyError && <span role="status">{t('copyFailed')}</span>}
       </div>
     </div>
-  </QuestionContentContext.Provider>
 }
