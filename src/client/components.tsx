@@ -9,6 +9,7 @@ import { questionStore } from './store.ts'
 import { QuestionContent, QuestionContentContext, type QuestionContentSlots } from './content.tsx'
 import { questionRemainingSeconds } from './lifecycle.mjs'
 import css from './question-card.module.css'
+import { answerText } from './answer-message.mjs'
 
 type Send = (text: string) => Promise<unknown>
 
@@ -23,6 +24,7 @@ type Send = (text: string) => Promise<unknown>
 type DockProps = {
   sessionId?: unknown
   send?: Send
+  t: (key: string) => string
 }
 
 /**
@@ -216,14 +218,6 @@ function useQuestions(sessionId: string | undefined): readonly QuestionEntry[] {
   )
 }
 
-function answerText(entry: QuestionEntry, selected: string[], custom: string): string {
-  return [
-    `对非阻塞问题「${entry.question.question}」的回答：`,
-    JSON.stringify({ questionId: `${entry.callId}:${entry.question.id}`, selected, ...(custom === '' ? {} : { custom }) }),
-    '请把它作为后续建议或决策的输入；之前的工作不需要重做。',
-  ].join('\n')
-}
-
 /** 选项显示独立说明和选中标记，提交保留原始标签。 */
 function OptionRow({ index, option, selected, multiSelect, busy, onChoose }: {
   index: number
@@ -266,9 +260,10 @@ function OptionRow({ index, option, selected, multiSelect, busy, onChoose }: {
 }
 
 /** 单题编辑区；草稿由会话面板保存，分页与收起不丢失输入。 */
-function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }: {
+function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts, t }: {
   entry: QuestionEntry
   send: Send
+  t: (key: string) => string
   index: number
   total: number
   onClose: () => void
@@ -282,6 +277,7 @@ function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const sending = useRef(false)
   // The free-form textarea autofocuses on first presentation; re-expanding a
   // collapsed question must not steal focus back into the input, so focus is
   // granted once per card.
@@ -294,7 +290,12 @@ function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }
   const last = index === total - 1
 
   const choose = (label: string): void => {
-    if (!multiSelect) setCustom('')
+    if (!multiSelect) {
+      setCustom('')
+      setSelected([label])
+      void submit([label], '')
+      return
+    }
     setSelected(current => multiSelect
       ? current.includes(label) ? current.filter(item => item !== label) : [...current, label]
       : current.includes(label) ? [] : [label])
@@ -308,12 +309,13 @@ function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }
     setCustom(value)
   }
 
-  const submit = async (): Promise<void> => {
-    if (!answered) { setError(COPY.unanswered); return }
-    if (locked) return
+  const submit = async (labels = selected, text = custom.trim()): Promise<void> => {
+    if (labels.length === 0 && text === '') { setError(COPY.unanswered); return }
+    if (locked || sending.current) return
+    sending.current = true
     setBusy(true); setError('')
     try {
-      await send(answerText(entry, selected, custom.trim()))
+      await send(answerText(entry, labels, text))
       // Latch before closing: the send has already been accepted, so a double
       // click must not be able to post the same answer twice.
       setSubmitted(true)
@@ -321,6 +323,7 @@ function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : '回答未能发送到此对话。')
     } finally {
+      sending.current = false
       setBusy(false)
     }
   }
@@ -404,7 +407,7 @@ function QuestionCard({ entry, send, index, total, onClose, onNavigate, drafts }
       <div className={css.footerActions}>
         <Button variant="outline" disabled={locked} onClick={() => { questionStore.close(entry, 'skipped') }}>{COPY.skip}</Button>
         <Button variant="primary" disabled={!answered || locked} onClick={() => { void submit() }}>
-          {busy ? '发送中…' : submitted ? '已提交' : '提交'}
+          {busy ? t('sending') : submitted ? t('sent') : t('send')}
         </Button>
       </div>
     </footer>
@@ -440,7 +443,7 @@ export function QuestionDock(props: DockProps & Partial<QuestionContentSlots>) {
   return <QuestionContentContext.Provider value={props.renderSlot}><QuestionDockBody {...props} /></QuestionContentContext.Provider>
 }
 
-function QuestionDockBody({ sessionId, send }: DockProps) {
+function QuestionDockBody({ sessionId, send, t }: DockProps) {
   const target = typeof sessionId === 'string' && sessionId !== '' ? sessionId : undefined
   const entries = useQuestions(target)
   const drafts = useMemo(() => new Map<string, { selected: string[], custom: string }>(), [target])
@@ -469,7 +472,7 @@ function QuestionDockBody({ sessionId, send }: DockProps) {
         ? (() => {
             const entry = entries.find(candidate => candidate.key === expandedKey)
             if (entry === undefined) return null
-            return <QuestionCard key={entry.key} entry={entry} send={answer}
+            return <QuestionCard key={entry.key} entry={entry} send={answer} t={t}
               index={entries.findIndex(candidate => candidate.key === entry.key)}
               total={entries.length}
               drafts={drafts}

@@ -9,7 +9,7 @@
  *
  *   node tests/visual-preview.mjs <chromium> <playwright-entry> <out-dir> [theme]
  */
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -78,6 +78,11 @@ const TOKENS = {
     '--dsw-elevation-panel': '0 8px 24px rgba(16,24,40,.12)',
   },
 }
+TOKENS.dark['--dsw-specific-bubble'] = '#17385e'
+TOKENS.light['--dsw-specific-bubble'] = '#edf4ff'
+TOKENS.dark['--dsw-radius-xl'] = TOKENS.light['--dsw-radius-xl'] = '20px'
+TOKENS.custom = { ...TOKENS.dark, '--dsw-alias-bg-base': '#071a2b', '--dsw-alias-bg-layer-1': '#102841', '--dsw-specific-bubble': '#17385e', '--dsw-alias-label-primary': '#e7f3ff', '--dsw-alias-label-secondary': '#bcd1e8' }
+mkdirSync(outDir, { recursive: true })
 
 const tokens = TOKENS[theme]
 const page = `
@@ -150,6 +155,10 @@ await live.addScriptTag({ content: `
           // the harness stays independent of the primitive package's internals.
           const ICON = /^Icon/;
           return new Proxy({}, { get: (_t, key) => {
+            if (key === 'projectUserText') return text => text
+            if (key === 'writeClipboard') return async text => { window.copiedText = text; return true }
+            if (key === 'fileExtension') return path => path.split('.').at(-1)
+            if (key === 'fileSizeText') return bytes => bytes + ' B'
             if (typeof key !== 'string' || !/^[A-Z]/.test(key)) return undefined
             if (ICON.test(key)) {
               const Glyph = props => {
@@ -165,7 +174,7 @@ await live.addScriptTag({ content: `
               }
               return Glyph
             }
-            const Stub = props => { const { variant, children, ...rest } = props; return window.React.createElement('button', { ...rest, 'data-prim': key, 'data-variant': variant }, children) }
+            const Stub = props => { const { variant, children, ...rest } = props; return window.React.createElement(key === 'Button' ? 'button' : 'span', { ...rest, 'data-prim': key, 'data-variant': variant }, children) }
             return Stub
           }, has: () => true })
         }
@@ -176,6 +185,48 @@ await live.addScriptTag({ content: `
 ` })
 await live.addScriptTag({ content: bundle })
 
+if (expand === 'answers') {
+  await live.evaluate(() => {
+    const regs = []
+    const locales = {}
+    const ctx = { effect: fn => fn(), locale: { register: (name, value) => { locales[name] = value.zh; return () => {} } }, sessions: {}, slots: {
+      inject: (_name, setup) => setup(), register: (options, component) => { regs.push({ options, component }); return () => {} },
+    } }
+    window.__dshLoaded.exports.apply(ctx)
+    const renderer = regs.find(entry => entry.options.key === 'user').component
+    const t = key => locales['proactive-answer'][key] ?? key
+    const suffix = '\n请把它作为后续建议或决策的输入；之前的工作不需要重做。'
+    const answer = (question, selected, custom) => '对非阻塞问题「' + question + '」的回答：\n' + JSON.stringify({ questionId: 'preview:q', selected, custom }) + suffix
+    const samples = [
+      answer('这次要做哪一个新流程？', [], '你看群消息，今天的，看了文档如果还有问题则后端'),
+      answer('需要验证哪些场景？', ['明暗主题 (Recommended)', '手机布局'], '保留之前的工作进度。'),
+      '普通消息与 @角色 引用保持可读。',
+    ]
+    const stage = document.getElementById('stage')
+    stage.style.display = 'grid'
+    stage.style.gap = '24px'
+    for (const text of samples) {
+      const box = document.createElement('div')
+      stage.appendChild(box)
+      ReactDOM.createRoot(box).render(React.createElement(renderer, { t, node: { data: { content: [{ type: 'text', text }], time: 1_700_000_000_000 } }, renderMessageImages: () => null, openFile() {}, openSkill() {} }))
+    }
+  })
+  await live.locator('[data-dsh-answer-message]').first().waitFor()
+  if (await live.locator('[data-dsh-answer-message]').count() !== 2) throw new Error('both answer variants must render')
+  const receipts = await live.locator('[data-dsh-answer-message]').allTextContents()
+  if (receipts.some(text => /questionId|selected|之前的工作不需要重做/.test(text))) throw new Error('receipt leaked protocol text')
+  await live.getByRole('button', { name: '复制', exact: true }).first().click()
+  if (!await live.evaluate(() => window.copiedText.includes('questionId'))) throw new Error('copy lost original payload')
+  await live.locator('#stage').screenshot({ path: join(outDir, `answer-card-${theme}.png`) })
+  await live.setViewportSize({ width: 390, height: 844 })
+  if (await live.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('receipt overflow on mobile')
+  await live.locator('#stage').screenshot({ path: join(outDir, `answer-card-${theme}-mobile.png`) })
+  if (problems.length) throw new Error(problems.join(' | '))
+  console.log('PASS: answer cards, copy and narrow-screen layout: ' + theme)
+  await browser.close()
+  process.exit(0)
+}
+
 const rendered = await live.evaluate(({ questionsJson, themeName, expand }) => {
   const React = window.React
   const loaded = window.__dshLoaded
@@ -183,6 +234,7 @@ const rendered = await live.evaluate(({ questionsJson, themeName, expand }) => {
   const ctx = {
     effect: fn => (typeof fn === 'function' ? fn() : undefined),
     sessions: {},
+    locale: { register: () => () => {} },
     slots: {
       inject: (name, setup) => { calls.push({ name, setup }); return () => {} },
       register: (options, component) => { (ctx.regs ??= []).push({ slot: ctx.open, options, component }); return () => {} },
@@ -208,7 +260,7 @@ const rendered = await live.evaluate(({ questionsJson, themeName, expand }) => {
   return new Promise(resolve => {
     setTimeout(() => {
       if (expand === 'aged') { const now = Date.now(); Date.now = () => now + 130000 }
-      ReactDOM.createRoot(dockBox).render(React.createElement(dock.component, { sessionId: 's1', send: async () => undefined }))
+      ReactDOM.createRoot(dockBox).render(React.createElement(dock.component, { sessionId: 's1', t: key => ({ send: '发送回答', sending: '发送中…', sent: '已发送' })[key] ?? key, send: async () => undefined }))
       setTimeout(() => {
         // The dock expands its NEWEST question by default. Clicking the older
         // row's 回答 moves the full card onto that one, which is how the
@@ -249,8 +301,6 @@ if (await live.locator('[data-dsh-question-card]').count() !== 0) throw new Erro
 await live.getByRole('button', { name: /需要你的意见/ }).click()
 await live.getByRole('textbox').fill('可以补充说明')
 if (await live.getByRole('radio').first().getAttribute('aria-checked') !== 'false') throw new Error('custom answer exclusivity failed')
-await live.getByRole('radio').first().click()
-if (await live.getByRole('textbox').inputValue() !== '') throw new Error('option must replace custom answer')
 await live.getByRole('button', { name: '下一题', exact: true }).click()
 if (await live.getByRole('checkbox').first().getAttribute('aria-checked') !== 'true') throw new Error('navigation lost draft')
 await live.getByRole('button', { name: '上一题', exact: true }).click()
@@ -270,7 +320,7 @@ async function checkVoiceRow() {
 await checkVoiceRow()
 const insets = await live.locator('[data-dsh-question-card]').evaluate(card => {
   const box = card.getBoundingClientRect()
-  const title = card.querySelector('h2').getBoundingClientRect()
+  const title = card.querySelector('[role="heading"]').getBoundingClientRect()
   const option = card.querySelector('[data-dsh-question-option]').getBoundingClientRect()
   if (option.height > 58) throw new Error('two-line option is too tall: ' + option.height)
   const bar = card.parentElement.previousElementSibling.getBoundingClientRect()

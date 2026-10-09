@@ -108,19 +108,19 @@ test('the loader can execute the bundle and it registers both slot occurrences',
   // realm, whose array prototypes do not match this one's.
   const apply = loaded?.apply
   assert.equal(typeof apply, 'function', 'the bundle did not export its client plugin as apply().')
-  assert.equal([...loaded.inject].join(','), 'slots,sessions',
+  assert.equal([...loaded.inject].join(','), 'slots,sessions,locale',
     'the client plugin no longer declares the slots and sessions services.')
 
   // `slots.inject(key, callback)` runs the callback with no arguments once the
   // slot has a declaration (`registry.ts`), and the registration it makes
   // through `slots.register` is what carries the declaration.
-  apply({ slots: {
+  apply({ effect: fn => fn(), locale: { register: () => () => {} }, slots: {
     inject: (_key, callback) => { callback(); return () => {} },
     register: (registration) => { registered.push(registration); return () => {} },
   } })
 
   assert.equal(registered.map(entry => entry.name).sort().join(','),
-    'conversation.input.dock,tool.call.toolview',
+    'conversation.chat.node,conversation.chat.node,conversation.input.dock,tool.call.toolview',
     'the client plugin no longer registers both of its slot occurrences.')
   assert.equal(registered.find(entry => entry.name === 'tool.call.toolview').key, 'queue_user_question',
     'the tool view is no longer keyed to queue_user_question.')

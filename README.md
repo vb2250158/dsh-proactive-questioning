@@ -1,5 +1,13 @@
 # DSH 主动提问（私有）
 
+## 0.1.11：直接发送与回答卡片
+
+单选点击后直接发送；自由回答按 Enter 或点击“发送回答”，Shift+Enter 换行；多选勾选完成后点击“发送回答”。发送期间锁定本题，成功后关闭，失败保留所选内容与草稿供重试。回答发送到原会话的队列，当前执行完成后处理。
+
+聊天记录将回答显示为卡片，分开呈现问题、选项和补充文字，保留时间与复制。旧版回答也适用；复制仍得到完整原文。普通用户消息与 steering 消息由本插件通过公开 keyed renderer 显示，保留附件、引用、长文本、额外内容和复制；格式不完整时显示原文。卸载插件后宿主恢复原渲染器。[English behavior and compatibility](docs/answers.md).
+
+此版本将单选从“选择后提交”改为“点击即发送”，不再允许单选提交前切换选项。多选与自由文字仍可编辑后发送。
+
 This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compatibility details](docs/dsh-0.2-compatibility.md).
 
 ## 0.1.6：图文说明与提问面板

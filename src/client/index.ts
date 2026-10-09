@@ -5,13 +5,23 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { QueuedQuestionToolRow, QuestionDock } from './components.tsx'
 import { asSessionId, scopedSend } from './host.ts'
+import { AnswerMessageView } from './answer-view.tsx'
+import { answerLocales } from './answer-locales.ts'
 
-export const inject = ['slots', 'sessions']
+export const inject = ['slots', 'sessions', 'locale']
 
 /** Mount one non-blocking question queue per conversation; no Rabi or emotional-data dependency exists here. */
 export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.locale.register('proactive-answer', answerLocales))
+  for (const key of ['user', 'steering'] as const) {
+    ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+      name: 'conversation.chat.node', key, priority: 100, locale: 'proactive-answer',
+      children: { 'proactive.question.content': { kind: 'single', scope: 'session' } },
+    }, AnswerMessageView))
+  }
   /**
    * The Tool row's only job is to mirror the call into the store. Identity
    * comes from the framework's Session standard props (`sessionId`), which
@@ -38,7 +48,7 @@ export function apply(ctx: ClientContext): void {
     id: 'proactive-questioning-dock',
     children: { 'proactive.question.content': { kind: 'single', scope: 'session' } },
     order: 15,
-    locale: 'conversation',
+    locale: 'proactive-answer',
     inject: (sessionId: unknown): { send?: (text: string) => Promise<unknown> } => { const send = scopedSend(ctx, asSessionId(sessionId)); return send === undefined ? {} : { send } },
   }, QuestionDock))
 }
