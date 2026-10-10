@@ -4,7 +4,7 @@ Version 0.1.11 sends a single-choice answer immediately when its option is click
 
 Delivery uses the scoped public Conversation send method, which queues the answer on its original session. It never writes to the main composer draft. Queued answers are handled after the active turn finishes.
 
-Answer receipts separate the question, chosen labels and additional text. Existing complete answer envelopes receive the same presentation. Copy preserves the full logged text, including original labels and identity. Invalid or extended envelopes retain their original text. No transcript migration or model-input rewrite occurs.
+Answer receipts place the question and answered status in one compact header, with chosen labels and additional text below. Short answers size to their content. Existing complete answer envelopes receive the same presentation. Copy preserves the full logged text, including original labels and identity. Invalid or extended envelopes retain their original text. No transcript migration or model-input rewrite occurs.
 
 The plugin replaces the public user and steering keyed Chat renderers at priority 100. Its ordinary-message presentation retains authorized image galleries, file metadata, reference and skill projection, timestamps, extra content and copy. It does not import the host's internal renderer. Disposing the plugin restores the lower-priority host entries.
 

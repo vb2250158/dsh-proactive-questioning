@@ -91,7 +91,7 @@ const page = `
   :root { ${Object.entries(tokens).map(([k, v]) => `${k}: ${v};`).join('\n          ')} }
   html, body { margin: 0; }
   body {
-    background: ${theme === 'dark' ? 'var(--dsw-alias-bg-base)' : '#f2f3f6'};
+    background: var(--dsw-alias-bg-base);
     font-family: "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
     padding: 24px;
   }
@@ -99,6 +99,7 @@ const page = `
   [data-prim="Button"] { font: inherit; padding: 8px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; color: var(--dsw-alias-label-primary); background: transparent; }
   [data-variant="primary"] { background: var(--dsw-alias-label-primary); color: var(--dsw-alias-label-primary-foreground); }
   [data-prim="Button"]:disabled { opacity: .4; }
+  [data-prim="Tag"] { display: inline-flex; align-items: center; border-radius: 999px; padding: 1px 8px; font-size: 11px; line-height: 17px; font-weight: 500; white-space: nowrap; }
 </style></head>
 <body><div id="stage"></div></body></html>`
 

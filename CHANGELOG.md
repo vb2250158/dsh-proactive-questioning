@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.13 (2026-10-10)
+
+- 回答卡片将问题与已回答状态放在同一行，收紧内边距和选项间距，短回答按内容收窄。
+- Compact answer receipts combine the question and status in one header, reduce padding and selection spacing, and size short answers to their content.
+
 ## 0.1.12 (2026-10-09)
 
 - 回答卡片不再重复声明问题内容插槽，恢复提问面板与消息渲染。

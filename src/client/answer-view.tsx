@@ -60,10 +60,9 @@ export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steeri
         </div>}
         {answer !== undefined ? <section className={css.receipt} aria-label={t('answered')}>
           <header className={css.header}>
-            <span className={css.heading}><IconCheckOutlineRegular size={16} />{t('answer')}</span>
-            <Tag tone="success">{t('answered')}</Tag>
+            <div className={css.question}>{projectUserText(answer.question, [], [], 'skill', { openFile, openSkill })}</div>
+            <span className={css.status}><Tag tone="success">{t('answered')}</Tag></span>
           </header>
-          <div className={css.question}>{projectUserText(answer.question, [], [], 'skill', { openFile, openSkill })}</div>
           <div className={css.answer}>
             {answer.selected.length > 0 && <ul className={css.selections}>
               {answer.selected.map((label: string, index: number) => <li key={index}><IconCheckOutlineRegular size={14} /><span>{parseRecommendedLabel(label).label}</span></li>)}
