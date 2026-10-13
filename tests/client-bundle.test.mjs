@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { createContext, runInContext } from 'node:vm'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildSync } from 'esbuild'
 
 /**
  * Contract tests for the built Web bundle (`lib/client.js`).
@@ -116,13 +117,14 @@ test('the loader can execute the bundle and it registers both slot occurrences',
   // slot has a declaration (`registry.ts`), and the registration it makes
   // through `slots.register` is what carries the declaration.
   apply({ effect: fn => fn(), locale: { register: () => () => {} }, slots: {
+    registerFactory: () => () => {},
     inject: (_key, callback) => { callback(); return () => {} },
-    register: (registration) => {
+    register: (registration, component) => {
       for (const name of Object.keys(registration.children ?? {})) {
         assert.equal(declarations.has(name), false, `slot ${name} has more than one declaring owner`)
         declarations.add(name)
       }
-      registered.push(registration)
+      registered.push({ ...registration, component })
       return () => {}
     },
   } })
@@ -142,4 +144,26 @@ test('the loader can execute the bundle and it registers both slot occurrences',
     'the dock inject face must expose exactly the send verb keyed off the positional session id.')
   assert.equal(dock.inject(undefined).send, undefined,
     'an occurrence without a usable session id must degrade to no send verb instead of throwing.')
+
+  const source = resolve(process.env.DSH_SOURCE_ROOT ?? resolve(root, '../../../deepseek-harness'), 'packages/client/ui-slots/src/index.ts')
+  const compiled = buildSync({ entryPoints: [source], bundle: true, write: false, platform: 'node', format: 'cjs' }).outputFiles[0].text
+  const module = { exports: {} }
+  runInContext(compiled, createContext({ module, exports: module.exports, console, queueMicrotask }))
+  const core = new module.exports.SlotCore()
+  core.register({ name: 'root', children: { 'conversation.chat.node': { kind: 'keyed', scope: 'session' } } }, () => null)
+  for (const key of ['user', 'steering']) {
+    const ordinary = () => null
+    core.register({ name: 'conversation.chat.node', key }, ordinary)
+    const own = registered.find(item => item.name === 'conversation.chat.node' && item.key === key)
+    const disposeOwn = core.register(own, own.component)
+    const winner = () => core.entriesOfSlot('conversation.chat.node').find(item => item.options.key === key).component
+    assert.equal(winner(), own.component, 'answer presentation must win over the host default')
+    const rabi = () => null
+    const disposeRabi = core.register({ name: 'conversation.chat.node', key, priority: -10 }, rabi)
+    assert.equal(winner(), rabi, 'the source-envelope renderer retains its caller role')
+    disposeRabi()
+    assert.equal(winner(), own.component)
+    disposeOwn()
+    assert.equal(winner(), ordinary, 'unloading restores the host renderer')
+  }
 })

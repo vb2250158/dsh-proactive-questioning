@@ -191,7 +191,7 @@ if (expand === 'answers') {
     const regs = []
     const locales = {}
     const ctx = { effect: fn => fn(), locale: { register: (name, value) => { locales[name] = value.zh; return () => {} } }, sessions: {}, slots: {
-      inject: (_name, setup) => setup(), register: (options, component) => { regs.push({ options, component }); return () => {} },
+      registerFactory: () => () => {}, inject: (_name, setup) => setup(), register: (options, component) => { regs.push({ options, component }); return () => {} },
     } }
     window.__dshLoaded.exports.apply(ctx)
     const renderer = regs.find(entry => entry.options.key === 'user').component
@@ -237,6 +237,7 @@ const rendered = await live.evaluate(({ questionsJson, themeName, expand }) => {
     sessions: {},
     locale: { register: () => () => {} },
     slots: {
+      registerFactory: () => () => {},
       inject: (name, setup) => { calls.push({ name, setup }); return () => {} },
       register: (options, component) => { (ctx.regs ??= []).push({ slot: ctx.open, options, component }); return () => {} },
     },

@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { QueuedQuestionToolRow, QuestionDock } from './components.tsx'
 import { asSessionId, scopedSend } from './host.ts'
-import { AnswerMessageView } from './answer-view.tsx'
+import { AnswerMessageFactory, AnswerMessageView } from './answer-view.tsx'
 import { answerLocales } from './answer-locales.ts'
 
 export const inject = ['slots', 'sessions', 'locale']
@@ -16,9 +16,10 @@ export const inject = ['slots', 'sessions', 'locale']
 /** Mount one non-blocking question queue per conversation; no Rabi or emotional-data dependency exists here. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register('proactive-answer', answerLocales))
+  ctx.effect(() => ctx.slots.registerFactory({ name: 'proactive-answer.message', locale: 'proactive-answer' }, AnswerMessageFactory))
   for (const key of ['user', 'steering'] as const) {
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
-      name: 'conversation.chat.node', key, priority: 100, locale: 'proactive-answer',
+      name: 'conversation.chat.node', key, priority: -5, locale: 'proactive-answer',
     }, AnswerMessageView))
   }
   /**

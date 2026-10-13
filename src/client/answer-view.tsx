@@ -1,5 +1,5 @@
 /** User and steering message presentation through the public keyed Chat renderer. */
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ChatNodeViewProps } from '@deepseek-ai/dsh-client-ui-chat/client'
 import {
   Button, FileTypeIcon, IconCheckOutlineRegular, IconCopyOutlineRegular, JsonBlock,
@@ -8,6 +8,25 @@ import {
 import { parseAnswerText } from './answer-message.mjs'
 import { parseRecommendedLabel } from './components.tsx'
 import css from './answer-view.module.css'
+
+/** Caller-owned inputs for answer presentation inside another message renderer. */
+export type AnswerFactoryInput = Pick<ChatNodeViewProps<'user' | 'steering'>, 'node' | 'renderMessageImages' | 'openFile' | 'openSkill'> & { fallback: ReactNode }
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotFactoryMap {
+    'proactive-answer.message': { props: AnswerFactoryInput; locale: 'proactive-answer' }
+  }
+}
+
+/**
+ * Render complete answer envelopes; preserve the caller's ordinary-message presentation otherwise.
+ * @param props - message inputs, localized copy and the caller's fallback.
+ * @returns the answer card or the original presentation.
+ */
+export function AnswerMessageFactory(props: AnswerFactoryInput & { t: (key: string, values?: Record<string, string | number>) => string }) {
+  const text = props.node.data.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+  return parseAnswerText(text) === undefined ? props.fallback : <AnswerMessageView {...props} />
+}
 
 /** Render recognized answers as receipts; retain text, attachments, references and copy for all other messages. */
 export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steering'>, 't'> & {

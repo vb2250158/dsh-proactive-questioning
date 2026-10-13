@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.14 (2026-10-13)
+
+- 修正消息渲染优先级；通过公开 Component Factory 与 Rabi 来源卡片共存。
+- Correct the ascending renderer priority and share answer cards through a public Component Factory without replacing Rabi source envelopes.
+
 ## 0.1.13 (2026-10-10)
 
 - 回答卡片将问题与已回答状态放在同一行，收紧内边距和选项间距，短回答按内容收窄。

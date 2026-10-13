@@ -113,6 +113,7 @@ const ctx = {
   sessions: {},
     locale: { register: () => () => {} },
   slots: {
+    registerFactory: (options, component) => { ctx.factory = { options, component }; return () => {} },
     inject(name, setup) { (ctx.calls ??= []).push({ name, setup }); return () => {} },
     register: () => () => {},
   },
@@ -284,7 +285,7 @@ await act(async () => { multiDock.querySelector('[data-prim="Button"]:last-child
 assert.match(multiSent[0], /"selected":\["一","二"\]/)
 
 const answerView = regs.find(reg => reg.options.key === 'user')
-assert.equal(answerView.options.priority, 100)
+assert.ok(answerView.options.priority < 0, 'answer presentation must rank ahead of the host default')
 const copy = { answered: '已回答', answer: '回答', supplement: '补充', copy: '复制', copied: '已复制', references: '引用：{labels}' }
 const t = (key, values) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), copy[key] ?? key)
 const imageCalls = []
@@ -310,6 +311,11 @@ assert.match(ordinary.textContent, /引用：角色/)
 assert.equal(imageCalls.length, 1, 'ordinary attachments use the public authorized gallery')
 const malformed = mount(answerView.component, propsFor(customText.replace('"selected":[]', '"selected":null')))
 assert.ok(malformed.textContent.includes('"selected":null'), 'malformed messages keep their original text')
+const fallback = React.createElement('span', { 'data-original-message': '' }, '调用方原始展示')
+const factoryReceipt = mount(ctx.factory.component, { ...propsFor(customText), fallback })
+assert.ok(factoryReceipt.querySelector('[data-dsh-answer-message]'), 'the shared factory renders answers under another keyed renderer')
+const factoryOrdinary = mount(ctx.factory.component, { ...propsFor('普通消息'), fallback })
+assert.equal(factoryOrdinary.textContent, '调用方原始展示', 'an unmatched message retains its caller presentation')
 console.log('render smoke: answer admission, receipt, legacy messages and ordinary messages passed')
 console.log(`  countdown repainted ${firstRead} -> ..., and read ${settledRead} once the window lapsed`)
 console.log('  a lapsed window kept the question answerable; no render crash was swallowed')
