@@ -291,8 +291,12 @@ const copy = { answered: '已回答', answer: '回答', supplement: '补充', co
 const t = (key, values) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), copy[key] ?? key)
 const imageCalls = []
 const propsFor = (text, content = []) => ({ node: { data: { content: [{ type: 'text', text }, ...content], time: 1_700_000_000_000, referenceLabels: ['角色'], skillNames: ['test'] } }, t,
-  renderFactorySlot: (name, owner) => { assert.equal(name, 'conversation.user.text'); return React.createElement('span', { 'data-user-text': '' }, owner.text) },
-  renderMessageImages: owner => { imageCalls.push(owner); return React.createElement('span', { 'data-image': '' }, 'image') }, openFile() {}, openSkill() {} })
+  renderFactorySlot: (name, owner) => {
+    if (name === 'conversation.images.content') { assert.equal(typeof owner.loadImage, 'function'); imageCalls.push(owner); return React.createElement('span', { 'data-image': '' }, 'image') }
+    assert.equal(name, 'conversation.user.text'); return React.createElement('span', { 'data-user-text': '' }, owner.text)
+  },
+  loadImage: async () => 'data:image/png;base64,fixture',
+  renderMessageImages: legacyProjection ? owner => { imageCalls.push(owner); return React.createElement('span', { 'data-image': '' }, 'image') } : undefined, openFile() {}, openSkill() {} })
 const receipt = mount(answerView.component, propsFor(sent[0]))
 assert.ok(receipt.querySelector('[data-dsh-answer-message]'))
 assert.match(receipt.textContent, /选哪个？/)

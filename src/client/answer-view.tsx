@@ -1,6 +1,7 @@
 /** User and steering message presentation through the public keyed Chat renderer. */
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ChatNodeViewProps } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { MessageImagesOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import {
   Button, FileTypeIcon, IconCheckOutlineRegular, IconCopyOutlineRegular, JsonBlock,
   Tag, Tooltip, fileExtension, fileSizeText, projectUserText, writeClipboard,
@@ -10,7 +11,12 @@ import { parseRecommendedLabel } from './components.tsx'
 import css from './answer-view.module.css'
 
 /** Caller-owned inputs for answer presentation inside another message renderer. */
-export type AnswerFactoryInput = Pick<ChatNodeViewProps<'user' | 'steering'>, 'node' | 'renderMessageImages' | 'openFile' | 'openSkill'> & { fallback: ReactNode }
+type LegacyMessageProps = {
+  renderMessageImages?: (owner: Omit<MessageImagesOwnerProps, 'loadImage'>) => ReactNode
+  openSkill?: (name: string) => void
+}
+
+export type AnswerFactoryInput = Pick<ChatNodeViewProps<'user' | 'steering'>, 'node' | 'loadImage' | 'openFile'> & LegacyMessageProps & { fallback: ReactNode }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotFactoryMap {
@@ -31,8 +37,8 @@ export function AnswerMessageFactory(props: AnswerFactoryInput & Pick<ChatNodeVi
 /** Render recognized answers as receipts; retain text, attachments, references and copy for all other messages. */
 export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steering'>, 't'> & {
   t: (key: string, values?: Record<string, string | number>) => string
-}) {
-  const { node, renderMessageImages, openFile, openSkill, renderFactorySlot, t } = props
+} & LegacyMessageProps) {
+  const { node, renderMessageImages, loadImage, openFile, openSkill, renderFactorySlot, t } = props
   const data = node.data
   const text = data.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
   const answer = parseAnswerText(text)
@@ -73,7 +79,9 @@ export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steeri
       <div className={css.stack}>
         {attachments.length > 0 && <div className={css.attachments} data-message-attachments>
           {attachments.map((block, index) => block.type === 'image'
-            ? <Fragment key={index}>{renderMessageImages({ images: [{ attachment: block.attachment }], align: 'end', compact: attachments.length > 1 })}</Fragment>
+            ? <Fragment key={index}>{typeof renderMessageImages === 'function'
+              ? renderMessageImages({ images: [{ attachment: block.attachment }], align: 'end', compact: attachments.length > 1 })
+              : renderFactorySlot('conversation.images.content', { images: [{ attachment: block.attachment }], loadImage, align: 'end', compact: attachments.length > 1 })}</Fragment>
             : block.type === 'file' ? <span key={index} className={css.file} title={block.attachment.name}>
                 <FileTypeIcon path={block.attachment.name} />
                 <span className={css.fileCopy}><span>{block.attachment.name}</span>

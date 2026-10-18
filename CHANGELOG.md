@@ -2,6 +2,9 @@
 
 ## 0.1.15 (2026-10-19)
 
+- 图片兼容公开 gallery Factory，保留宿主授权读取能力。
+- Use the public gallery Factory while preserving Host-authorized image loading.
+
 - 回答卡片兼容 rc.2 的 conversation.user.text Factory，并保留旧宿主投影。
 - Render answer cards through the rc.2 user-text Factory while retaining legacy Host projection.
 
