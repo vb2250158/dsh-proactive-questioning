@@ -62,9 +62,10 @@ const bundle = readFileSync(join(pluginRoot, 'lib/client.js'), 'utf8')
 
 // Primitives render as a tag named after themselves, so assertions can name the
 // exact primitive the card reached for without depending on its real markup.
+const legacyProjection = !argv.includes('--rc2')
 const primitives = new Proxy({}, {
   get: (_target, key) => {
-    if (key === 'projectUserText') return text => text
+    if (key === 'projectUserText') return legacyProjection ? text => text : undefined
     if (key === 'fileExtension') return path => path.split('.').at(-1)
     if (key === 'fileSizeText') return bytes => `${bytes} B`
     if (key === 'writeClipboard') return async text => { clipboard.push(text); return true }
@@ -290,6 +291,7 @@ const copy = { answered: '已回答', answer: '回答', supplement: '补充', co
 const t = (key, values) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), copy[key] ?? key)
 const imageCalls = []
 const propsFor = (text, content = []) => ({ node: { data: { content: [{ type: 'text', text }, ...content], time: 1_700_000_000_000, referenceLabels: ['角色'], skillNames: ['test'] } }, t,
+  renderFactorySlot: (name, owner) => { assert.equal(name, 'conversation.user.text'); return React.createElement('span', { 'data-user-text': '' }, owner.text) },
   renderMessageImages: owner => { imageCalls.push(owner); return React.createElement('span', { 'data-image': '' }, 'image') }, openFile() {}, openSkill() {} })
 const receipt = mount(answerView.component, propsFor(sent[0]))
 assert.ok(receipt.querySelector('[data-dsh-answer-message]'))
@@ -314,6 +316,7 @@ assert.ok(malformed.textContent.includes('"selected":null'), 'malformed messages
 const fallback = React.createElement('span', { 'data-original-message': '' }, '调用方原始展示')
 const factoryReceipt = mount(ctx.factory.component, { ...propsFor(customText), fallback })
 assert.ok(factoryReceipt.querySelector('[data-dsh-answer-message]'), 'the shared factory renders answers under another keyed renderer')
+if (!legacyProjection) assert.ok(factoryReceipt.querySelector('[data-user-text]'), 'rc.2 text reaches the public user-text factory without the removed export')
 const factoryOrdinary = mount(ctx.factory.component, { ...propsFor('普通消息'), fallback })
 assert.equal(factoryOrdinary.textContent, '调用方原始展示', 'an unmatched message retains its caller presentation')
 console.log('render smoke: answer admission, receipt, legacy messages and ordinary messages passed')

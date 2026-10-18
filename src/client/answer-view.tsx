@@ -10,7 +10,7 @@ import { parseRecommendedLabel } from './components.tsx'
 import css from './answer-view.module.css'
 
 /** Caller-owned inputs for answer presentation inside another message renderer. */
-export type AnswerFactoryInput = Pick<ChatNodeViewProps<'user' | 'steering'>, 'node' | 'renderMessageImages' | 'openFile' | 'openSkill'> & { fallback: ReactNode }
+export type AnswerFactoryInput = Pick<ChatNodeViewProps<'user' | 'steering'>, 'node' | 'renderMessageImages' | 'openFile' | 'openSkill' | 'renderFactorySlot'> & { fallback: ReactNode }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotFactoryMap {
@@ -32,7 +32,7 @@ export function AnswerMessageFactory(props: AnswerFactoryInput & { t: (key: stri
 export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steering'>, 't'> & {
   t: (key: string, values?: Record<string, string | number>) => string
 }) {
-  const { node, renderMessageImages, openFile, openSkill, t } = props
+  const { node, renderMessageImages, openFile, openSkill, renderFactorySlot, t } = props
   const data = node.data
   const text = data.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
   const answer = parseAnswerText(text)
@@ -64,6 +64,10 @@ export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steeri
   const attachments = data.content.filter(block => block.type === 'image' || block.type === 'file')
   const extra = data.content.filter(block => !['text', 'image', 'file'].includes(block.type))
   const references = data.referenceLabels ?? []
+  const renderText = (value: string, sessionLabels: readonly string[] = [], skillNames: readonly string[] = []) =>
+    typeof projectUserText === 'function'
+      ? projectUserText(value, sessionLabels, skillNames, 'skill', { openFile, openSkill })
+      : renderFactorySlot('conversation.user.text', { text: value, facts: { sessionLabels, skillNames }, interactive: true })
   const time = new Date(data.time)
   return <div className={css.row} data-dsh-answer-message={answer === undefined ? undefined : ''}>
       <div className={css.stack}>
@@ -79,7 +83,7 @@ export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steeri
         </div>}
         {answer !== undefined ? <section className={css.receipt} aria-label={t('answered')}>
           <header className={css.header}>
-            <div className={css.question}>{projectUserText(answer.question, [], [], 'skill', { openFile, openSkill })}</div>
+            <div className={css.question}>{renderText(answer.question)}</div>
             <span className={css.status}><Tag tone="success">{t('answered')}</Tag></span>
           </header>
           <div className={css.answer}>
@@ -88,11 +92,11 @@ export function AnswerMessageView(props: Omit<ChatNodeViewProps<'user' | 'steeri
             </ul>}
             {answer.custom !== '' && <div className={css.custom}>
               {answer.selected.length > 0 && <div className={css.caption}>{t('supplement')}</div>}
-              <div>{projectUserText(answer.custom, [], [], 'skill', { openFile, openSkill })}</div>
+              <div>{renderText(answer.custom)}</div>
             </div>}
           </div>
         </section> : (text !== '' || extra.length > 0) && <div className={css.bubble}>
-          {projectUserText(text, references, data.skillNames ?? [], 'skill', { openFile, openSkill })}
+          {renderText(text, references, data.skillNames ?? [])}
         </div>}
         {extra.map((block, index) => <JsonBlock key={index} label={t('extra')} payload={block} truncatedLabel={total => t('truncated', { total })} />)}
         {references.length > 0 && <div className={css.caption}>{t('references', { labels: references.join('、') })}</div>}

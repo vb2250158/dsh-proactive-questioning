@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.15 (2026-10-19)
+
+- 回答卡片兼容 rc.2 的 conversation.user.text Factory，并保留旧宿主投影。
+- Render answer cards through the rc.2 user-text Factory while retaining legacy Host projection.
+
 ## 0.1.14 (2026-10-13)
 
 - 修正消息渲染优先级；通过公开 Component Factory 与 Rabi 来源卡片共存。
