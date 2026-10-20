@@ -167,3 +167,7 @@ test('the loader can execute the bundle and it registers both slot occurrences',
     assert.equal(winner(), ordinary, 'unloading restores the host renderer')
   }
 })
+
+test('the shipped bundle contains no local Windows build path', () => {
+  assert.doesNotMatch(bundle, /[A-Za-z]:[\\/]/)
+})

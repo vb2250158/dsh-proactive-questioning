@@ -87,3 +87,5 @@ The plugin list shows **Proactive questions** in English and **主动提问** in
 The icon uses a centered 36 × 36 viewBox to leave more space around the artwork inside the plugin icon frame.
 
 rc.2 回答卡片使用公开 conversation.user.text Factory；旧宿主继续使用原文本投影。
+
+Builds use repository-relative CSS filenames. The shipped client bundle contains no machine-specific build directory.

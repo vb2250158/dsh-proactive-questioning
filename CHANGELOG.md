@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.16 (2026-10-20)
+
+- Build CSS modules from repository-relative paths and sort their class maps so shipped bundles exclude machine paths and preserve styles across checkout locations.
+- CSS 构建使用仓库相对路径并固定类名表顺序，避免产物包含本机路径。
+
+
 ## 0.1.15 (2026-10-19)
 
 - 图片兼容公开 gallery Factory，保留宿主授权读取能力。

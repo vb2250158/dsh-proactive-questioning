@@ -2,7 +2,7 @@ import { build } from 'esbuild'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { basename, dirname, resolve } from 'node:path'
+import { basename, dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -64,20 +64,21 @@ function cssModulesPlugin() {
     name: 'dsh-css-modules-inline',
     setup(pluginBuild) {
       pluginBuild.onResolve({ filter: /\.module\.css$/ }, args => ({
-        path: VIRTUAL_PREFIX + resolve(args.resolveDir, args.path) + VIRTUAL_SUFFIX,
+        path: VIRTUAL_PREFIX + relative(root, resolve(args.resolveDir, args.path)).replaceAll('\\', '/') + VIRTUAL_SUFFIX,
         namespace: 'dsh-css',
       }))
       pluginBuild.onLoad({ filter: /.*/, namespace: 'dsh-css' }, async (args) => {
-        const fileId = args.path.slice(VIRTUAL_PREFIX.length, -VIRTUAL_SUFFIX.length)
+        const relativeId = args.path.slice(VIRTUAL_PREFIX.length, -VIRTUAL_SUFFIX.length)
+        const fileId = resolve(root, relativeId)
         const source = await readFile(fileId)
         const { code, exports: cssExports } = transform({
-          filename: fileId,
+          filename: relativeId,
           code: source,
           cssModules: { pattern: '[hash]_[local]' },
           minify: true,
         })
         const classMap = {}
-        for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
+        for (const [local, exp] of Object.entries(cssExports ?? {}).sort(([left], [right]) => left.localeCompare(right))) classMap[local] = exp.name
         const tagId = `${moduleId}/${basename(fileId)}`
         const contents = [
           `const css = ${JSON.stringify(code.toString())};`,
