@@ -1,5 +1,7 @@
 # Answer delivery and presentation
 
+The `proactive-answer.message` Factory accepts either `{ row: UserRowInput, fallback }` or the existing durable-node input. Prepared rows use the same receipt component for local submission echoes, Host-pending steering and durable messages. Local image previews pass through the authorized gallery. Timestamps come from a real submission or durable node; Host-pending rows without a timestamp omit it. Unmatched text keeps the caller's fallback in every state.
+
 Version 0.1.11 sends a single-choice answer immediately when its option is clicked. This changes the previous select-then-submit interaction. Multi-select answers retain an explicit Send answer action. Free text sends with Enter or that action; Shift+Enter inserts a newline. While admission is pending, the question is disabled. Success closes it; failure retains its draft and displays the failure for retry.
 
 Delivery uses the scoped public Conversation send method, which queues the answer on its original session. It never writes to the main composer draft. Queued answers are handled after the active turn finishes.

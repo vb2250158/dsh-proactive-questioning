@@ -323,6 +323,36 @@ assert.ok(factoryReceipt.querySelector('[data-dsh-answer-message]'), 'the shared
 if (!legacyProjection) assert.ok(factoryReceipt.querySelector('[data-user-text]'), 'rc.2 text reaches the public user-text factory without the removed export')
 const factoryOrdinary = mount(ctx.factory.component, { ...propsFor('普通消息'), fallback })
 assert.equal(factoryOrdinary.textContent, '调用方原始展示', 'an unmatched message retains its caller presentation')
+const durableProps = propsFor(customText)
+const submission = { requestId: 'answer-local', time: durableProps.node.data.time, placement: 'transcript', text: customText, attachments: [] }
+const prepared = {
+  content: { text: customText, attachments: [], extraBlocks: [], referenceLabels: ['角色'] },
+  facts: { sessionLabels: ['角色'], skillNames: ['test'] },
+  loadImage: durableProps.loadImage,
+}
+const rowProps = origin => ({ row: { ...prepared, origin }, t, renderFactorySlot: durableProps.renderFactorySlot, fallback })
+const localReceipt = mount(ctx.factory.component, rowProps({ kind: 'submission', submission }))
+const durableRowReceipt = mount(ctx.factory.component, rowProps({ kind: 'durable', node: durableProps.node }))
+assert.equal(localReceipt.querySelector('[data-dsh-answer-message]').innerHTML, durableRowReceipt.querySelector('[data-dsh-answer-message]').innerHTML,
+  'a local answer and its durable replacement use identical receipt content and geometry')
+assert.ok(localReceipt.querySelector('[data-submission-echo]'), 'local answer receipts retain their submission marker')
+assert.equal(durableRowReceipt.querySelector('[data-submission-echo]'), null)
+const pendingReceipt = mount(ctx.factory.component, rowProps({ kind: 'pending-steering' }))
+assert.ok(pendingReceipt.querySelector('[data-pending-steering]'))
+assert.equal(pendingReceipt.querySelector('time'), null, 'Host-pending rows never invent a timestamp')
+assert.equal(pendingReceipt.querySelector('[data-dsh-answer-message] section').innerHTML, localReceipt.querySelector('[data-dsh-answer-message] section').innerHTML)
+const preview = { preview: { url: 'blob:answer-preview', name: 'preview.png', width: 4, height: 3 } }
+const previewReceipt = mount(ctx.factory.component, { ...rowProps({ kind: 'submission', submission }), row: {
+  ...prepared, origin: { kind: 'submission', submission },
+  content: { ...prepared.content, attachments: [{ type: 'image', image: preview }, { type: 'file', file: { name: 'answer.txt', bytes: 42 } }] },
+} })
+assert.equal(imageCalls.at(-1).images[0], preview, 'local answer images reach the authorized gallery as previews')
+assert.equal(imageCalls.at(-1).loadImage, durableProps.loadImage)
+assert.match(previewReceipt.textContent, /answer.txt/)
+const preparedOrdinary = mount(ctx.factory.component, { ...rowProps({ kind: 'submission', submission }), row: {
+  ...prepared, origin: { kind: 'submission', submission }, content: { ...prepared.content, text: 'ordinary local message' },
+} })
+assert.equal(preparedOrdinary.textContent, '调用方原始展示', 'unmatched local messages preserve their caller fallback')
 console.log('render smoke: answer admission, receipt, legacy messages and ordinary messages passed')
 console.log(`  countdown repainted ${firstRead} -> ..., and read ${settledRead} once the window lapsed`)
 console.log('  a lapsed window kept the question answerable; no render crash was swallowed')
