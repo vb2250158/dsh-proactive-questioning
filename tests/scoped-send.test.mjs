@@ -60,6 +60,7 @@ function loadBundle(sessions, sessionId = 's1') {
   const ctx = {
     effect: () => {},
     sessions,
+    uiConversation: { userText: { register: () => () => {} } },
     slots: {
       inject: (name, setup) => { calls.push({ name, setup }); return () => {} },
       register: (options, component) => { regs.push({ slot: ctx.open, options, component }); return () => {} },

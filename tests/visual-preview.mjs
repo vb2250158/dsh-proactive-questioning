@@ -190,11 +190,12 @@ if (expand === 'answers') {
   await live.evaluate(() => {
     const regs = []
     const locales = {}
-    const ctx = { effect: fn => fn(), locale: { register: (name, value) => { locales[name] = value.zh; return () => {} } }, sessions: {}, slots: {
+    let answerRule
+    const ctx = { effect: fn => fn(), uiConversation: { userText: { register: rule => { answerRule = rule; return () => {} } } }, locale: { register: (name, value) => { locales[name] = value.zh; return () => {} } }, sessions: {}, slots: {
       registerFactory: () => () => {}, inject: (_name, setup) => setup(), register: (options, component) => { regs.push({ options, component }); return () => {} },
     } }
     window.__dshLoaded.exports.apply(ctx)
-    const renderer = regs.find(entry => entry.options.key === 'user').component
+    const renderer = regs.find(entry => entry.options.key === 'proactive-answer').component
     const t = key => locales['proactive-answer'][key] ?? key
     const suffix = '\n请把它作为后续建议或决策的输入；之前的工作不需要重做。'
     const answer = (question, selected, custom) => '对非阻塞问题「' + question + '」的回答：\n' + JSON.stringify({ questionId: 'preview:q', selected, custom }) + suffix
@@ -209,21 +210,20 @@ if (expand === 'answers') {
     for (const text of samples) {
       const box = document.createElement('div')
       stage.appendChild(box)
-      ReactDOM.createRoot(box).render(React.createElement(renderer, { t, node: { data: { content: [{ type: 'text', text }], time: 1_700_000_000_000 } }, renderMessageImages: () => null, openFile() {}, openSkill() {} }))
+      const node = answerRule.match(text, 0)
+      ReactDOM.createRoot(box).render(node === undefined ? text : React.createElement(renderer, { t, node }))
     }
   })
   await live.locator('[data-dsh-answer-message]').first().waitFor()
   if (await live.locator('[data-dsh-answer-message]').count() !== 2) throw new Error('both answer variants must render')
   const receipts = await live.locator('[data-dsh-answer-message]').allTextContents()
   if (receipts.some(text => /questionId|selected|之前的工作不需要重做/.test(text))) throw new Error('receipt leaked protocol text')
-  await live.getByRole('button', { name: '复制', exact: true }).first().click()
-  if (!await live.evaluate(() => window.copiedText.includes('questionId'))) throw new Error('copy lost original payload')
   await live.locator('#stage').screenshot({ path: join(outDir, `answer-card-${theme}.png`) })
   await live.setViewportSize({ width: 390, height: 844 })
   if (await live.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('receipt overflow on mobile')
   await live.locator('#stage').screenshot({ path: join(outDir, `answer-card-${theme}-mobile.png`) })
   if (problems.length) throw new Error(problems.join(' | '))
-  console.log('PASS: answer cards, copy and narrow-screen layout: ' + theme)
+  console.log('PASS: answer cards and narrow-screen layout: ' + theme)
   await browser.close()
   process.exit(0)
 }
@@ -235,6 +235,7 @@ const rendered = await live.evaluate(({ questionsJson, themeName, expand }) => {
   const ctx = {
     effect: fn => (typeof fn === 'function' ? fn() : undefined),
     sessions: {},
+    uiConversation: { userText: { register: () => () => {} } },
     locale: { register: () => () => {} },
     slots: {
       registerFactory: () => () => {},

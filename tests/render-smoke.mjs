@@ -112,6 +112,7 @@ vm.runInContext(bundle, sandbox, { filename: 'client.js' })
 const ctx = {
   effect: fn => (typeof fn === 'function' ? fn() : undefined),
   sessions: {},
+  uiConversation: { userText: { register: rule => { ctx.answerRule = rule; return () => {} } } },
     locale: { register: () => () => {} },
   slots: {
     registerFactory: (options, component) => { ctx.factory = { options, component }; return () => {} },
@@ -137,7 +138,7 @@ for (const call of ctx.calls ?? []) {
   ctx.open = call.name
   call.setup({ name: call.name, register: () => { throw new Error('the bundle used the slot-local register') } })
 }
-assert.equal(regs.length, 4, 'both occurrences must register')
+assert.equal(regs.length, 3, 'dock, tool view and answer text node must register')
 const toolview = regs.find(reg => reg.options.key === 'queue_user_question')
 const translate = key => ({ send: '发送回答', sending: '发送中…', sent: '已发送' })[key] ?? key
 const dock = regs.find(reg => reg.options.id === 'proactive-questioning-dock')
@@ -285,74 +286,24 @@ assert.equal(multiSent.length, 0, 'multi-select waits for the explicit send acti
 await act(async () => { multiDock.querySelector('[data-prim="Button"]:last-child').click() })
 assert.match(multiSent[0], /"selected":\["一","二"\]/)
 
-const answerView = regs.find(reg => reg.options.key === 'user')
-assert.ok(answerView.options.priority < 0, 'answer presentation must rank ahead of the host default')
-const copy = { answered: '已回答', answer: '回答', supplement: '补充', copy: '复制', copied: '已复制', references: '引用：{labels}' }
-const t = (key, values) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), copy[key] ?? key)
-const imageCalls = []
-const propsFor = (text, content = []) => ({ node: { data: { content: [{ type: 'text', text }, ...content], time: 1_700_000_000_000, referenceLabels: ['角色'], skillNames: ['test'] } }, t,
-  renderFactorySlot: (name, owner) => {
-    if (name === 'conversation.images.content') { assert.equal(typeof owner.loadImage, 'function'); imageCalls.push(owner); return React.createElement('span', { 'data-image': '' }, 'image') }
-    assert.equal(name, 'conversation.user.text'); return React.createElement('span', { 'data-user-text': '' }, owner.text)
-  },
-  loadImage: async () => 'data:image/png;base64,fixture',
-  renderMessageImages: legacyProjection ? owner => { imageCalls.push(owner); return React.createElement('span', { 'data-image': '' }, 'image') } : undefined, openFile() {}, openSkill() {} })
-const receipt = mount(answerView.component, propsFor(sent[0]))
+const answerView = regs.find(reg => reg.options.key === 'proactive-answer')
+assert.ok(answerView, 'answer is rendered through the official text node slot')
+assert.equal(regs.some(reg => reg.slot === 'conversation.chat.node'), false, 'ordinary host rows are never replaced')
+const t = key => ({ answered: '已回答', supplement: '补充' }[key] ?? key)
+const node = ctx.answerRule.match(sent[0], 0)
+assert.ok(node)
+const receipt = mount(answerView.component, { node, t })
 assert.ok(receipt.querySelector('[data-dsh-answer-message]'))
 assert.match(receipt.textContent, /选哪个？/)
 assert.match(receipt.textContent, /首选/)
-assert.doesNotMatch(receipt.textContent, /questionId|selected|之前的工作|Recommended/)
-await act(async () => { receipt.querySelector('[aria-label="复制"]').click() })
-assert.equal(clipboard.at(-1), sent[0], 'copy preserves the complete original payload')
-assert.ok(receipt.querySelector('[aria-label="已复制"]'))
-assert.equal(receipt.querySelector('time').dateTime, '2023-11-14T22:13:20.000Z')
+assert.equal(receipt.querySelectorAll('[role=list]').length, 1)
+assert.equal(receipt.querySelectorAll('[role=listitem]').length, 1)
+assert.doesNotMatch(receipt.textContent, /questionId|selected|Recommended/)
+assert.equal(receipt.querySelector('button'), null, 'copy and other row actions belong to the host')
+assert.equal(ctx.answerRule.match('普通消息', 0), undefined)
 const customText = '对非阻塞问题「今天做什么？」的回答：\n' + JSON.stringify({ questionId: 'c:q', selected: [], custom: '看今天的消息\n看看文档' }) + '\n请把它作为后续建议或决策的输入；之前的工作不需要重做。'
-const customReceipt = mount(answerView.component, propsFor(customText))
-assert.match(customReceipt.textContent, /看今天的消息\n看看文档/)
-const ordinary = mount(answerView.component, propsFor('普通消息 @角色 /test', [{ type: 'image', attachment: { id: 'image-1' } }, { type: 'file', attachment: { name: 'report.txt', bytes: 20 } }]))
-assert.equal(ordinary.querySelector('[data-dsh-answer-message]'), null)
-assert.match(ordinary.textContent, /普通消息 @角色 \/test/)
-assert.match(ordinary.textContent, /report.txt/)
-assert.match(ordinary.textContent, /引用：角色/)
-assert.equal(imageCalls.length, 1, 'ordinary attachments use the public authorized gallery')
-const malformed = mount(answerView.component, propsFor(customText.replace('"selected":[]', '"selected":null')))
-assert.ok(malformed.textContent.includes('"selected":null'), 'malformed messages keep their original text')
-const fallback = React.createElement('span', { 'data-original-message': '' }, '调用方原始展示')
-const factoryReceipt = mount(ctx.factory.component, { ...propsFor(customText), fallback })
-assert.ok(factoryReceipt.querySelector('[data-dsh-answer-message]'), 'the shared factory renders answers under another keyed renderer')
-if (!legacyProjection) assert.ok(factoryReceipt.querySelector('[data-user-text]'), 'rc.2 text reaches the public user-text factory without the removed export')
-const factoryOrdinary = mount(ctx.factory.component, { ...propsFor('普通消息'), fallback })
-assert.equal(factoryOrdinary.textContent, '调用方原始展示', 'an unmatched message retains its caller presentation')
-const durableProps = propsFor(customText)
-const submission = { requestId: 'answer-local', time: durableProps.node.data.time, placement: 'transcript', text: customText, attachments: [] }
-const prepared = {
-  content: { text: customText, attachments: [], extraBlocks: [], referenceLabels: ['角色'] },
-  facts: { sessionLabels: ['角色'], skillNames: ['test'] },
-  loadImage: durableProps.loadImage,
-}
-const rowProps = origin => ({ row: { ...prepared, origin }, t, renderFactorySlot: durableProps.renderFactorySlot, fallback })
-const localReceipt = mount(ctx.factory.component, rowProps({ kind: 'submission', submission }))
-const durableRowReceipt = mount(ctx.factory.component, rowProps({ kind: 'durable', node: durableProps.node }))
-assert.equal(localReceipt.querySelector('[data-dsh-answer-message]').innerHTML, durableRowReceipt.querySelector('[data-dsh-answer-message]').innerHTML,
-  'a local answer and its durable replacement use identical receipt content and geometry')
-assert.ok(localReceipt.querySelector('[data-submission-echo]'), 'local answer receipts retain their submission marker')
-assert.equal(durableRowReceipt.querySelector('[data-submission-echo]'), null)
-const pendingReceipt = mount(ctx.factory.component, rowProps({ kind: 'pending-steering' }))
-assert.ok(pendingReceipt.querySelector('[data-pending-steering]'))
-assert.equal(pendingReceipt.querySelector('time'), null, 'Host-pending rows never invent a timestamp')
-assert.equal(pendingReceipt.querySelector('[data-dsh-answer-message] section').innerHTML, localReceipt.querySelector('[data-dsh-answer-message] section').innerHTML)
-const preview = { preview: { url: 'blob:answer-preview', name: 'preview.png', width: 4, height: 3 } }
-const previewReceipt = mount(ctx.factory.component, { ...rowProps({ kind: 'submission', submission }), row: {
-  ...prepared, origin: { kind: 'submission', submission },
-  content: { ...prepared.content, attachments: [{ type: 'image', image: preview }, { type: 'file', file: { name: 'answer.txt', bytes: 42 } }] },
-} })
-assert.equal(imageCalls.at(-1).images[0], preview, 'local answer images reach the authorized gallery as previews')
-assert.equal(imageCalls.at(-1).loadImage, durableProps.loadImage)
-assert.match(previewReceipt.textContent, /answer.txt/)
-const preparedOrdinary = mount(ctx.factory.component, { ...rowProps({ kind: 'submission', submission }), row: {
-  ...prepared, origin: { kind: 'submission', submission }, content: { ...prepared.content, text: 'ordinary local message' },
-} })
-assert.equal(preparedOrdinary.textContent, '调用方原始展示', 'unmatched local messages preserve their caller fallback')
+assert.match(mount(answerView.component, { node: ctx.answerRule.match(customText, 0), t }).textContent, /看今天的消息\n看看文档/)
+assert.equal(ctx.answerRule.match(customText.replace('"selected":[]', '"selected":null'), 0), undefined)
 console.log('render smoke: answer admission, receipt, legacy messages and ordinary messages passed')
 console.log(`  countdown repainted ${firstRead} -> ..., and read ${settledRead} once the window lapsed`)
 console.log('  a lapsed window kept the question answerable; no render crash was swallowed')
